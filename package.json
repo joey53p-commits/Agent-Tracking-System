@@ -4,7 +4,7 @@
   "private": true,
   "description": "Local-first agent-work tracking for Rise development.",
   "scripts": {
-    "check": "node --check packages/event-schema/index.js && node --check apps/collector/collect.js",
+    "check": "node --check packages/event-schema/index.js && node --check apps/collector/collect.js && node --check apps/storage/database.js",
     "test": "node --test"
   },
   "engines": { "node": ">=20" }

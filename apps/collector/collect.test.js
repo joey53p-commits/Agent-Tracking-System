@@ -1,8 +1,8 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
-const { normalizeEvent, writeEvent } = require('./collect');
+const { closeDatabase, listEvents, openDatabase } = require('../storage/database');
+const { normalizeEvent, storeEvent } = require('./collect');
 
 function safeCandidate() {
   return {
@@ -26,10 +26,12 @@ test('rejects sensitive fields before storage', () => {
   assert.throws(() => normalizeEvent(candidate), /privacy policy/);
 });
 
-test('writes newline-delimited events to the approved event directory', () => {
+test('stores approved events in the local database', () => {
   const event = normalizeEvent(safeCandidate());
-  const outputDirectory = path.join(__dirname, '../../data/events');
-  const outputPath = writeEvent(event, outputDirectory);
-  assert.equal(fs.existsSync(outputPath), true);
-  fs.rmSync(path.join(__dirname, '../../data/events'), { recursive: true, force: true });
+  const databasePath = path.join(__dirname, '../../data/collector.test.sqlite');
+  storeEvent(event, databasePath);
+  const database = openDatabase(databasePath);
+  assert.equal(listEvents(database).length, 1);
+  closeDatabase(database);
+  require('node:fs').rmSync(databasePath, { force: true });
 });

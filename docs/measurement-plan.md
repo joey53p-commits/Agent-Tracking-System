@@ -21,7 +21,7 @@ Do not use the pilot to rank agents, infer individual productivity, or measure q
 1. Prepare a short, safe JSON event using `examples/rise-task-event.json`.
 2. Run the collector in dry-run mode and inspect the normalized result.
 3. Run it without `--dry-run` only after the event passes review.
-4. The collector saves JSON Lines data only under `data/events/`, which Git ignores.
+4. The collector saves approved events in `data/agent-tracking.sqlite`, which Git ignores.
 
 ```powershell
 node apps/collector/collect.js --input examples/rise-task-event.json --dry-run

@@ -3,9 +3,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { validateTaskEvent } = require('../../packages/event-schema');
 const { assertSafeEvent } = require('./privacy');
-
-const repositoryRoot = path.resolve(__dirname, '../..');
-const defaultOutputDirectory = path.join(repositoryRoot, 'data', 'events');
+const { closeDatabase, defaultDatabasePath, openDatabase, recordEvent } = require('../storage/database');
 
 function normalizeEvent(candidate, now = new Date().toISOString()) {
   assertSafeEvent(candidate);
@@ -23,14 +21,14 @@ function normalizeEvent(candidate, now = new Date().toISOString()) {
   return event;
 }
 
-function writeEvent(event, outputDirectory = defaultOutputDirectory) {
-  const resolvedDirectory = path.resolve(outputDirectory);
-  const approvedDirectory = path.resolve(defaultOutputDirectory);
-  if (!resolvedDirectory.startsWith(`${approvedDirectory}${path.sep}`) && resolvedDirectory !== approvedDirectory) throw new Error('Collector output must stay inside data/events');
-  fs.mkdirSync(resolvedDirectory, { recursive: true });
-  const outputPath = path.join(resolvedDirectory, 'task-events.jsonl');
-  fs.appendFileSync(outputPath, `${JSON.stringify(event)}\n`, 'utf8');
-  return outputPath;
+function storeEvent(event, databasePath = defaultDatabasePath) {
+  const database = openDatabase(databasePath);
+  try {
+    recordEvent(database, event);
+    return databasePath;
+  } finally {
+    closeDatabase(database);
+  }
 }
 
 function parseArguments(argv) {
@@ -47,17 +45,17 @@ function main(argv = process.argv.slice(2)) {
   const options = parseArguments(argv);
   const candidate = JSON.parse(fs.readFileSync(path.resolve(options.input), 'utf8'));
   const event = normalizeEvent(candidate);
-  return { event, outputPath: options.dryRun ? null : writeEvent(event) };
+  return { event, databasePath: options.dryRun ? null : storeEvent(event) };
 }
 
 if (require.main === module) {
   try {
-    const { event, outputPath } = main();
-    process.stdout.write(`${outputPath ? `Recorded ${event.eventId} in ${outputPath}` : JSON.stringify(event, null, 2)}\n`);
+    const { event, databasePath } = main();
+    process.stdout.write(`${databasePath ? `Recorded ${event.eventId} in ${databasePath}` : JSON.stringify(event, null, 2)}\n`);
   } catch (error) {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;
   }
 }
 
-module.exports = { defaultOutputDirectory, main, normalizeEvent, writeEvent };
+module.exports = { main, normalizeEvent, storeEvent };
