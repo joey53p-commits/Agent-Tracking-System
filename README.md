@@ -13,7 +13,7 @@ can evolve and be released independently.
 2. Review [the pilot measurement plan](docs/measurement-plan.md).
 3. Use `node apps/collector/collect.js --input examples/rise-task-event.json --dry-run` to validate a safe event.
 4. Store normalized events in the local SQLite database under `data/` (ignored by Git).
-5. Build dashboard and reporting code under `apps/dashboard/`.
+5. Start the local dashboard with `npm run dashboard`, then open `http://127.0.0.1:4173`.
 
 ## Scope
 
@@ -41,3 +41,4 @@ data/              local database and exports; never committed
 - Treat task names, file paths, commit references, test outcomes, and elapsed
   time as the initial collection boundary.
 - Keep the GitHub repository private while the system contains work metadata.
+- The dashboard binds to `127.0.0.1`; it is not exposed to your local network.

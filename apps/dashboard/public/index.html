@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Agent Tracking System</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">LOCAL PILOT</p>
+          <h1>Agent work, made visible.</h1>
+          <p class="lede">Review progress and evidence across Rise tasks without exposing prompts, transcripts, or credentials.</p>
+        </div>
+        <div class="local-only"><span></span> Local-only data</div>
+      </header>
+
+      <section class="filters" aria-label="Filter tracked tasks">
+        <label>Project <select id="project-filter"><option value="">All projects</option></select></label>
+        <label>Workstream <select id="workstream-filter"><option value="">All workstreams</option></select></label>
+        <label>Status <select id="status-filter"><option value="">All statuses</option></select></label>
+        <button id="clear-filters" type="button">Clear filters</button>
+      </section>
+
+      <section class="metrics" aria-label="Task summary">
+        <article><span>Total tasks</span><strong id="total-tasks">0</strong></article>
+        <article><span>Completed</span><strong id="completed-tasks">0</strong></article>
+        <article><span>Interrupted</span><strong id="interrupted-tasks">0</strong></article>
+        <article><span>Retries</span><strong id="retries">0</strong></article>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel workstreams-panel">
+          <div class="panel-heading"><div><p class="eyebrow">WORKSTREAMS</p><h2>Where work is moving</h2></div></div>
+          <div id="workstreams" class="workstreams"></div>
+        </article>
+        <article class="panel">
+          <div class="panel-heading"><div><p class="eyebrow">TASKS</p><h2>Latest recorded work</h2></div><span id="task-count" class="count"></span></div>
+          <div id="empty-state" class="empty-state" hidden>
+            <h3>No tasks recorded yet</h3>
+            <p>Use the collector to add a reviewed task event. It will appear here immediately.</p>
+          </div>
+          <div id="task-list" class="task-list"></div>
+        </article>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
