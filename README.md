@@ -10,9 +10,10 @@ can evolve and be released independently.
 ## Start here
 
 1. Read [the data contract](docs/data-contract.md) and [privacy rules](docs/privacy.md).
-2. Add collectors under `apps/collector/`.
-3. Store normalized events locally under `data/` (ignored by Git).
-4. Build dashboard and reporting code under `apps/dashboard/`.
+2. Review [the pilot measurement plan](docs/measurement-plan.md).
+3. Use `node apps/collector/collect.js --input examples/rise-task-event.json --dry-run` to validate a safe event.
+4. Store normalized events locally under `data/` (ignored by Git).
+5. Build dashboard and reporting code under `apps/dashboard/`.
 
 ## Scope
 
