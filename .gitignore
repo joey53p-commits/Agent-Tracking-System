@@ -1,0 +1,25 @@
+# Dependencies and builds
+node_modules/
+dist/
+build/
+.next/
+coverage/
+
+# Local data and exports
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/exports/
+data/raw/
+
+# Secrets and environment configuration
+.env
+.env.*
+!.env.example
+
+# Tooling and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
