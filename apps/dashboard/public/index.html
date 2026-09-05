@@ -7,94 +7,50 @@
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
-    <main class="shell">
-      <header class="hero">
-        <div>
-          <p class="eyebrow">LOCAL PILOT</p>
-          <h1>Agent work, made visible.</h1>
-          <p class="lede">Review progress and evidence across Rise tasks without exposing prompts, transcripts, or credentials.</p>
-        </div>
-        <div class="local-only"><span></span> Local-only data</div>
-      </header>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#overview" data-page-link="overview"><span class="brand-mark">AT</span><span>Agent<br>Tracking</span></a>
+        <nav aria-label="Main navigation">
+          <button class="nav-item active" type="button" data-page="overview"><span>⌂</span>Overview</button>
+          <button class="nav-item" type="button" data-page="work"><span>✓</span>Work</button>
+          <button class="nav-item" type="button" data-page="agents"><span>◌</span>Agents</button>
+          <button class="nav-item" type="button" data-page="settings"><span>⚙</span>Settings</button>
+        </nav>
+        <button class="record-shortcut" type="button" data-page="work" data-work-view="record">+ Record work</button>
+        <p class="sidebar-note"><span></span> Local-only data</p>
+      </aside>
 
-      <section class="panel capture-panel" aria-labelledby="capture-title">
-        <div class="panel-heading">
-          <div><p class="eyebrow">PILOT CAPTURE</p><h2 id="capture-title">Record agent work</h2></div>
-          <p class="capture-note">Task metadata only. Prompts, transcripts, credentials, and raw command output are blocked.</p>
-        </div>
-        <form id="task-form" class="task-form">
-          <label class="wide">Task title<input id="task-title" name="task-title" maxlength="160" required placeholder="e.g. Validate exercise-library filters"></label>
-          <label>Project<select id="form-project" required></select></label>
-          <label>Workstream<select id="form-workstream" required></select></label>
-          <label>Agent profile<select id="agent-profile" required></select></label>
-          <label>Runtime<select id="runtime" required></select></label>
-          <label>Model<select id="model"></select></label>
-          <p id="agent-context" class="agent-context">Select an agent profile to record the role that performed this work.</p>
-          <label>Status<select id="form-status" required></select></label>
-          <label>Outcome<select id="outcome" required></select></label>
-          <label>Retries<input id="retry-count" type="number" min="0" max="99" value="0" required></label>
-          <label>Started at<input id="started-at" type="datetime-local" required></label>
-          <label class="wide">Validation evidence<textarea id="validation" maxlength="1000" rows="2" placeholder="One completed check per line"></textarea></label>
-          <label class="wide">Blocker, if any<textarea id="blocker" maxlength="500" rows="2" placeholder="Brief, non-sensitive reason the task cannot proceed"></textarea></label>
-          <details class="wide"><summary>Optional repository references</summary>
-            <div class="reference-grid">
-              <label>Repository<input id="repository" maxlength="120" placeholder="rise-redesign"></label>
-              <label>Branch<input id="branch" maxlength="120" placeholder="main"></label>
-              <label>Commit<input id="commit" maxlength="120" placeholder="Short SHA"></label>
-              <label>Changed files<textarea id="changed-files" maxlength="1000" rows="2" placeholder="One safe path per line"></textarea></label>
-            </div>
-          </details>
-          <div class="form-actions wide"><p id="form-message" role="status" aria-live="polite"></p><button type="submit">Record task</button></div>
-        </form>
-      </section>
+      <main class="main-content">
+        <header class="topbar"><div><p id="page-eyebrow" class="eyebrow">LOCAL PILOT</p><h1 id="page-title">Overview</h1></div><p id="page-description" class="page-description">See what is moving, what needs attention, and where to focus next.</p></header>
 
-      <section class="panel registry-panel" aria-labelledby="registry-title">
-        <div class="panel-heading">
-          <div><p class="eyebrow">AGENT REGISTRY</p><h2 id="registry-title">People-shaped roles, stable profiles</h2></div>
-          <p class="capture-note">Profiles identify the individual agent and its project role. Runtime and model are recorded separately for each task.</p>
-        </div>
-        <div id="agent-list" class="agent-list"></div>
-        <details class="add-agent"><summary>Add an agent profile</summary>
-          <form id="agent-form" class="agent-form">
-            <label>Agent name<input id="agent-name" maxlength="80" required placeholder="e.g. Rise Data Reviewer"></label>
-            <label>Project<select id="agent-project" required></select></label>
-            <label>Role<input id="agent-role" maxlength="80" required placeholder="e.g. Data review"></label>
-            <label>Runtime<select id="agent-runtime" required></select></label>
-            <label>Default model<select id="agent-model"></select></label>
-            <div class="form-actions"><p id="agent-message" role="status" aria-live="polite"></p><button type="submit">Add agent</button></div>
-          </form>
-        </details>
-      </section>
+        <section class="page active" id="overview-page" data-page-content="overview">
+          <div class="overview-actions"><button class="primary-button" type="button" data-page="work" data-work-view="record">Record work</button><button class="quiet-button" type="button" data-page="agents">Manage agents</button></div>
+          <section class="metrics" aria-label="Task summary">
+            <article><span>Total tasks</span><strong id="total-tasks">0</strong></article><article><span>Completed</span><strong id="completed-tasks">0</strong></article><article><span>Needs attention</span><strong id="interrupted-tasks">0</strong></article><article><span>Retries</span><strong id="retries">0</strong></article>
+          </section>
+          <section class="overview-grid">
+            <article class="panel"><div class="panel-heading"><div><p class="eyebrow">ATTENTION</p><h2>What needs review</h2></div></div><div id="attention-list" class="attention-list"></div></article>
+            <article class="panel"><div class="panel-heading"><div><p class="eyebrow">RECENT WORK</p><h2>Latest activity</h2></div><button class="text-button" type="button" data-page="work" data-work-view="history">View history</button></div><div id="recent-task-list" class="task-list compact-list"></div></article>
+          </section>
+        </section>
 
-      <section class="filters" aria-label="Filter tracked tasks">
-        <label>Project <select id="project-filter"><option value="">All projects</option></select></label>
-        <label>Workstream <select id="workstream-filter"><option value="">All workstreams</option></select></label>
-        <label>Status <select id="status-filter"><option value="">All statuses</option></select></label>
-        <button id="clear-filters" type="button">Clear filters</button>
-      </section>
+        <section class="page" id="work-page" data-page-content="work">
+          <div class="subnav" role="tablist" aria-label="Work views"><button class="subnav-item active" type="button" data-work-view="record">Record work</button><button class="subnav-item" type="button" data-work-view="active">Active & blocked</button><button class="subnav-item" type="button" data-work-view="history">Task history</button><button class="subnav-item" type="button" data-work-view="workstreams">Workstreams</button></div>
+          <section class="work-view active" data-work-content="record">
+            <article class="panel capture-panel"><div class="panel-heading"><div><p class="eyebrow">PILOT CAPTURE</p><h2>Record agent work</h2></div><p class="capture-note">Task metadata only. Prompts, transcripts, credentials, and raw command output are blocked.</p></div>
+              <form id="task-form" class="task-form"><label class="wide">Task title<input id="task-title" maxlength="160" required placeholder="e.g. Validate exercise-library filters"></label><label>Project<select id="form-project" required></select></label><label>Workstream<select id="form-workstream" required></select></label><label>Agent profile<select id="agent-profile" required></select></label><label>Runtime<select id="runtime" required></select></label><label>Model<select id="model"></select></label><p id="agent-context" class="agent-context">Select an agent profile to record the role that performed this work.</p><label>Status<select id="form-status" required></select></label><label>Outcome<select id="outcome" required></select></label><label>Retries<input id="retry-count" type="number" min="0" max="99" value="0" required></label><label>Started at<input id="started-at" type="datetime-local" required></label><label class="wide">Validation evidence<textarea id="validation" maxlength="1000" rows="2" placeholder="One completed check per line"></textarea></label><label class="wide">Blocker, if any<textarea id="blocker" maxlength="500" rows="2" placeholder="Brief, non-sensitive reason the task cannot proceed"></textarea></label><details class="wide"><summary>Optional repository references</summary><div class="reference-grid"><label>Repository<input id="repository" maxlength="120" placeholder="rise-redesign"></label><label>Branch<input id="branch" maxlength="120" placeholder="main"></label><label>Commit<input id="commit" maxlength="120" placeholder="Short SHA"></label><label>Changed files<textarea id="changed-files" maxlength="1000" rows="2" placeholder="One safe path per line"></textarea></label></div></details><div class="form-actions wide"><p id="form-message" role="status" aria-live="polite"></p><button class="primary-button" type="submit">Record task</button></div></form>
+            </article>
+          </section>
+          <section class="work-view" data-work-content="active"><article class="panel"><div class="panel-heading"><div><p class="eyebrow">NEEDS ATTENTION</p><h2>Active, blocked, and failed work</h2></div></div><div id="active-task-list" class="task-list"></div></article></section>
+          <section class="work-view" data-work-content="history"><section class="filters" aria-label="Filter tracked tasks"><label>Project <select id="project-filter"><option value="">All projects</option></select></label><label>Workstream <select id="workstream-filter"><option value="">All workstreams</option></select></label><label>Status <select id="status-filter"><option value="">All statuses</option></select></label><button id="clear-filters" type="button">Clear filters</button></section><article class="panel history-panel"><div class="panel-heading"><div><p class="eyebrow">TASKS</p><h2>Task history</h2></div><span id="task-count" class="count"></span></div><div id="empty-state" class="empty-state" hidden><h3>No tasks recorded yet</h3><p>Use Record work to add a reviewed task event.</p></div><div id="task-list" class="task-list"></div></article></section>
+          <section class="work-view" data-work-content="workstreams"><article class="panel"><div class="panel-heading"><div><p class="eyebrow">WORKSTREAMS</p><h2>Where work is moving</h2></div></div><div id="workstreams" class="workstreams"></div></article></section>
+        </section>
 
-      <section class="metrics" aria-label="Task summary">
-        <article><span>Total tasks</span><strong id="total-tasks">0</strong></article>
-        <article><span>Completed</span><strong id="completed-tasks">0</strong></article>
-        <article><span>Interrupted</span><strong id="interrupted-tasks">0</strong></article>
-        <article><span>Retries</span><strong id="retries">0</strong></article>
-      </section>
+        <section class="page" id="agents-page" data-page-content="agents"><article class="panel"><div class="panel-heading"><div><p class="eyebrow">AGENT REGISTRY</p><h2>Rise agents and their roles</h2></div><p class="capture-note">Agent identity, project role, and execution settings stay separate for meaningful performance tracking.</p></div><div id="agent-list" class="agent-list"></div><details class="add-agent"><summary>Add an agent profile</summary><form id="agent-form" class="agent-form"><label>Agent name<input id="agent-name" maxlength="80" required placeholder="e.g. Rise Data Reviewer"></label><label>Project<select id="agent-project" required></select></label><label>Role<input id="agent-role" maxlength="80" required placeholder="e.g. Data review"></label><label>Runtime<select id="agent-runtime" required></select></label><label>Default model<select id="agent-model"></select></label><div class="form-actions"><p id="agent-message" role="status" aria-live="polite"></p><button class="primary-button" type="submit">Add agent</button></div></form></details></article></section>
 
-      <section class="content-grid">
-        <article class="panel workstreams-panel">
-          <div class="panel-heading"><div><p class="eyebrow">WORKSTREAMS</p><h2>Where work is moving</h2></div></div>
-          <div id="workstreams" class="workstreams"></div>
-        </article>
-        <article class="panel">
-          <div class="panel-heading"><div><p class="eyebrow">TASKS</p><h2>Latest recorded work</h2></div><span id="task-count" class="count"></span></div>
-          <div id="empty-state" class="empty-state" hidden>
-            <h3>No tasks recorded yet</h3>
-            <p>Use the collector to add a reviewed task event. It will appear here immediately.</p>
-          </div>
-          <div id="task-list" class="task-list"></div>
-        </article>
-      </section>
-    </main>
+        <section class="page" id="settings-page" data-page-content="settings"><article class="panel settings-panel"><p class="eyebrow">LOCAL SETTINGS</p><h2>Tracker configuration</h2><p>Projects, workstreams, privacy protections, and the local database remain configured for this pilot.</p><div class="settings-row"><strong>Data location</strong><span>Local SQLite database</span></div><div class="settings-row"><strong>Privacy gate</strong><span>Prompts, transcripts, credentials, secrets, and raw output are blocked.</span></div><div class="settings-row"><strong>Automations</strong><span>Git and CI evidence imports will be added after real task data is established.</span></div></article></section>
+      </main>
+    </div>
     <script src="/app.js"></script>
   </body>
 </html>
