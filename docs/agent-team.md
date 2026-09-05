@@ -53,3 +53,11 @@ Add a role only when it has a sustained, distinct responsibility or security
 boundary. Retire or merge a role when it only duplicates another role. The
 database may contain many tracked agent profiles; this delivery team should
 remain small enough that ownership stays clear.
+
+## Launch and acceptance
+
+Foundation & Architecture uses the [Manager Launch Protocol](manager-launch-protocol.md)
+to choose the owner, task class, review gate, and sequencing before delegating
+material work. The protocol is the source of truth for when an agent should
+work alone, when independent review is required, and when a model escalation is
+justified.

@@ -33,6 +33,10 @@ changes, delegate discovery or review in parallel, then let one named owner
 integrate the resulting edits. Each subtask must state its deliverable,
 non-goals, validation required, and files or boundaries it owns.
 
+Before delegating material work, follow `docs/manager-launch-protocol.md`.
+Foundation & Architecture is the Delivery Manager and Integrator; it selects
+the owner, review gate, task class, and whether work is parallel or sequenced.
+
 Use the project-local custom agent profiles in `.codex/agents/` and follow
 `docs/model-routing.md`. Terra medium is the delivery-team default; Luna low is
 for bounded support work. Sol medium and Astra high are explicit escalations,
