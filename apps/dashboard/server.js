@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const { closeDatabase, defaultDatabasePath, getSummary, listEvents, openDatabase } = require('../storage/database');
+const { getFilterCatalog } = require('./catalog');
 
 const publicDirectory = path.join(__dirname, 'public');
 const staticFiles = {
@@ -23,11 +24,7 @@ function dashboardData(databasePath, filters) {
     return {
       summary: getSummary(database),
       events,
-      filters: {
-        projects: [...new Set(allEvents.map((event) => event.project))].sort(),
-        workstreams: [...new Set(allEvents.map((event) => event.workstream))].sort(),
-        statuses: [...new Set(allEvents.map((event) => event.execution_status))].sort(),
-      },
+      filters: getFilterCatalog(allEvents),
     };
   } finally {
     closeDatabase(database);

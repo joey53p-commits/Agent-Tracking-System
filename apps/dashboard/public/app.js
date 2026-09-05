@@ -35,8 +35,13 @@ function renderWorkstreams(workstreams) {
 }
 
 function renderTasks(events) {
+  const hasActiveFilter = filters.some((name) => document.querySelector(`#${name}-filter`).value);
   document.querySelector('#task-count').textContent = `${events.length} shown`;
   document.querySelector('#empty-state').hidden = events.length > 0;
+  document.querySelector('#empty-state h3').textContent = hasActiveFilter ? 'No tasks match these filters' : 'No tasks recorded yet';
+  document.querySelector('#empty-state p').textContent = hasActiveFilter
+    ? 'Try a different filter combination, or clear the filters to review all recorded work.'
+    : 'Use the collector to add a reviewed task event. It will appear here immediately.';
   document.querySelector('#task-list').innerHTML = events.map((event) => `
     <article class="task-card">
       <div class="task-main"><div class="task-title-row"><h3>${escapeHtml(event.task_title)}</h3><span class="status ${escapeHtml(event.execution_status)}">${label(event.execution_status)}</span></div>

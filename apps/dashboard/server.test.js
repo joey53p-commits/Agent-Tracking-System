@@ -41,7 +41,11 @@ test('serves a local dashboard summary without exposing a database file', async 
   await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 
   assert.equal(overview.statusCode, 200);
-  assert.equal(JSON.parse(overview.body).summary.totals.totalTasks, 1);
+  const overviewData = JSON.parse(overview.body);
+  assert.equal(overviewData.summary.totals.totalTasks, 1);
+  assert.equal(overviewData.filters.projects.includes('Rise'), true);
+  assert.equal(overviewData.filters.workstreams.includes('Quality Assurance'), true);
+  assert.equal(overviewData.filters.statuses.includes('waiting_for_approval'), true);
   assert.equal(databaseFile.statusCode, 404);
   fs.rmSync(testDatabasePath, { force: true });
   fs.rmSync(`${testDatabasePath}-wal`, { force: true });
