@@ -17,6 +17,35 @@
         <div class="local-only"><span></span> Local-only data</div>
       </header>
 
+      <section class="panel capture-panel" aria-labelledby="capture-title">
+        <div class="panel-heading">
+          <div><p class="eyebrow">PILOT CAPTURE</p><h2 id="capture-title">Record agent work</h2></div>
+          <p class="capture-note">Task metadata only. Prompts, transcripts, credentials, and raw command output are blocked.</p>
+        </div>
+        <form id="task-form" class="task-form">
+          <label class="wide">Task title<input id="task-title" name="task-title" maxlength="160" required placeholder="e.g. Validate exercise-library filters"></label>
+          <label>Project<select id="form-project" required></select></label>
+          <label>Workstream<select id="form-workstream" required></select></label>
+          <label>Agent<input id="agent" maxlength="80" required value="Codex"></label>
+          <label>Model<input id="model" maxlength="80" placeholder="Optional"></label>
+          <label>Status<select id="form-status" required></select></label>
+          <label>Outcome<select id="outcome" required></select></label>
+          <label>Retries<input id="retry-count" type="number" min="0" max="99" value="0" required></label>
+          <label>Started at<input id="started-at" type="datetime-local" required></label>
+          <label class="wide">Validation evidence<textarea id="validation" maxlength="1000" rows="2" placeholder="One completed check per line"></textarea></label>
+          <label class="wide">Blocker, if any<textarea id="blocker" maxlength="500" rows="2" placeholder="Brief, non-sensitive reason the task cannot proceed"></textarea></label>
+          <details class="wide"><summary>Optional repository references</summary>
+            <div class="reference-grid">
+              <label>Repository<input id="repository" maxlength="120" placeholder="rise-redesign"></label>
+              <label>Branch<input id="branch" maxlength="120" placeholder="main"></label>
+              <label>Commit<input id="commit" maxlength="120" placeholder="Short SHA"></label>
+              <label>Changed files<textarea id="changed-files" maxlength="1000" rows="2" placeholder="One safe path per line"></textarea></label>
+            </div>
+          </details>
+          <div class="form-actions wide"><p id="form-message" role="status" aria-live="polite"></p><button type="submit">Record task</button></div>
+        </form>
+      </section>
+
       <section class="filters" aria-label="Filter tracked tasks">
         <label>Project <select id="project-filter"><option value="">All projects</option></select></label>
         <label>Workstream <select id="workstream-filter"><option value="">All workstreams</option></select></label>

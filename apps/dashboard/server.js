@@ -3,6 +3,7 @@ const http = require('node:http');
 const path = require('node:path');
 const { closeDatabase, defaultDatabasePath, getSummary, listEvents, openDatabase } = require('../storage/database');
 const { getFilterCatalog } = require('./catalog');
+const { normalizeEvent } = require('../collector/collect');
 
 const publicDirectory = path.join(__dirname, 'public');
 const staticFiles = {
@@ -14,6 +15,43 @@ const staticFiles = {
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   response.end(JSON.stringify(payload));
+}
+
+function readJsonRequest(request, maximumBytes = 64 * 1024) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    let body = '';
+    request.setEncoding('utf8');
+    request.on('data', (chunk) => {
+      size += Buffer.byteLength(chunk);
+      if (size > maximumBytes) {
+        reject(new Error('Request body is too large.'));
+        request.destroy();
+        return;
+      }
+      body += chunk;
+    });
+    request.on('end', () => {
+      try {
+        resolve(JSON.parse(body));
+      } catch {
+        reject(new Error('Request body must be valid JSON.'));
+      }
+    });
+    request.on('error', reject);
+  });
+}
+
+function saveDashboardEvent(databasePath, candidate) {
+  const event = normalizeEvent(candidate);
+  const database = openDatabase(databasePath);
+  try {
+    const { recordEvent } = require('../storage/database');
+    recordEvent(database, event);
+    return event;
+  } finally {
+    closeDatabase(database);
+  }
 }
 
 function dashboardData(databasePath, filters) {
@@ -32,7 +70,7 @@ function dashboardData(databasePath, filters) {
 }
 
 function createDashboardServer({ databasePath = defaultDatabasePath } = {}) {
-  return http.createServer((request, response) => {
+  return http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     if (request.method === 'GET' && url.pathname === '/api/overview') {
       try {
@@ -43,6 +81,15 @@ function createDashboardServer({ databasePath = defaultDatabasePath } = {}) {
         }));
       } catch (error) {
         return sendJson(response, 500, { error: 'Unable to load local dashboard data.' });
+      }
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/events') {
+      try {
+        const event = saveDashboardEvent(databasePath, await readJsonRequest(request));
+        return sendJson(response, 201, { event });
+      } catch {
+        return sendJson(response, 400, { error: 'Unable to record the event. Check required fields and privacy restrictions.' });
       }
     }
 
@@ -63,4 +110,4 @@ function startDashboard({ port = Number(process.env.PORT || 4173), databasePath 
 
 if (require.main === module) startDashboard();
 
-module.exports = { createDashboardServer, dashboardData, startDashboard };
+module.exports = { createDashboardServer, dashboardData, saveDashboardEvent, startDashboard };

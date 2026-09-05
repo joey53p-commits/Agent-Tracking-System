@@ -18,6 +18,34 @@ function populateFilter(name, values) {
   });
 }
 
+function populateSelect(id, values, selectedValue) {
+  const select = document.querySelector(`#${id}`);
+  const selected = selectedValue ?? select.value;
+  select.innerHTML = '';
+  values.forEach((value) => select.add(new Option(label(value), value, false, value === selected)));
+}
+
+function populateCaptureForm(catalog) {
+  populateSelect('form-project', catalog.projects, document.querySelector('#form-project').value || 'Rise');
+  populateSelect('form-workstream', catalog.workstreams, document.querySelector('#form-workstream').value || 'Quality Assurance');
+  populateSelect('form-status', catalog.statuses, document.querySelector('#form-status').value || 'completed');
+  populateSelect('outcome', ['accepted', 'needs_review', 'reworked', 'not_applicable', 'unknown'], document.querySelector('#outcome').value || 'accepted');
+}
+
+function setStartedAtDefault() {
+  const input = document.querySelector('#started-at');
+  if (!input.value) input.value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function resetCaptureForm() {
+  document.querySelector('#task-form').reset();
+  document.querySelector('#form-project').value = 'Rise';
+  document.querySelector('#form-workstream').value = 'Quality Assurance';
+  document.querySelector('#form-status').value = 'completed';
+  document.querySelector('#outcome').value = 'accepted';
+  setStartedAtDefault();
+}
+
 function renderMetrics(totals) {
   document.querySelector('#total-tasks').textContent = totals.totalTasks || 0;
   document.querySelector('#completed-tasks').textContent = totals.completedTasks || 0;
@@ -63,6 +91,8 @@ async function loadDashboard() {
   populateFilter('project', data.filters.projects);
   populateFilter('workstream', data.filters.workstreams);
   populateFilter('status', data.filters.statuses);
+  populateCaptureForm(data.filters);
+  setStartedAtDefault();
   renderMetrics(data.summary.totals);
   renderWorkstreams(data.summary.workstreams);
   renderTasks(data.events);
@@ -73,6 +103,58 @@ document.querySelector('#clear-filters').addEventListener('click', () => {
   filters.forEach((name) => { document.querySelector(`#${name}-filter`).value = ''; });
   loadDashboard().catch(showError);
 });
+
+function lines(id) {
+  return document.querySelector(`#${id}`).value.split('\n').map((value) => value.trim()).filter(Boolean);
+}
+
+function toIso(id) {
+  const value = document.querySelector(`#${id}`).value;
+  return value ? new Date(value).toISOString() : null;
+}
+
+async function submitTask(event) {
+  event.preventDefault();
+  const message = document.querySelector('#form-message');
+  const status = document.querySelector('#form-status').value;
+  const candidate = {
+    task: {
+      id: `local-${crypto.randomUUID()}`,
+      title: document.querySelector('#task-title').value.trim(),
+      project: document.querySelector('#form-project').value,
+      workstream: document.querySelector('#form-workstream').value,
+    },
+    execution: {
+      agent: document.querySelector('#agent').value.trim(),
+      model: document.querySelector('#model').value.trim() || null,
+      startedAt: toIso('started-at'),
+      completedAt: status === 'completed' ? new Date().toISOString() : null,
+      status,
+    },
+    outcome: {
+      result: document.querySelector('#outcome').value,
+      retryCount: Number(document.querySelector('#retry-count').value),
+      blocker: document.querySelector('#blocker').value.trim() || null,
+      validation: lines('validation'),
+    },
+    references: {
+      repository: document.querySelector('#repository').value.trim() || null,
+      branch: document.querySelector('#branch').value.trim() || null,
+      commit: document.querySelector('#commit').value.trim() || null,
+      changedFiles: lines('changed-files'),
+    },
+  };
+  message.textContent = 'Recording task…';
+  const response = await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(candidate) });
+  if (!response.ok) throw new Error('Unable to record this task. Check required fields and avoid private content.');
+  resetCaptureForm();
+  message.textContent = 'Task recorded locally.';
+  await loadDashboard();
+}
+
+document.querySelector('#task-form').addEventListener('submit', (event) => submitTask(event).catch((error) => {
+  document.querySelector('#form-message').textContent = error.message;
+}));
 
 function showError() {
   document.querySelector('#task-list').innerHTML = '<p class="error">The dashboard could not load the local tracker database.</p>';
