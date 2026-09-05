@@ -49,6 +49,7 @@ test('serves a local dashboard summary without exposing a database file', async 
   assert.equal(overviewData.filters.projects.includes('Rise'), true);
   assert.equal(overviewData.filters.workstreams.includes('Quality Assurance'), true);
   assert.equal(overviewData.filters.statuses.includes('waiting_for_approval'), true);
+  assert.equal(Array.isArray(overviewData.agentPerformance), true);
   assert.equal(databaseFile.statusCode, 404);
   fs.rmSync(testDatabasePath, { force: true });
   fs.rmSync(`${testDatabasePath}-wal`, { force: true });

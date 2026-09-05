@@ -201,6 +201,33 @@ function listEvents(database, filters = {}) {
   }));
 }
 
+function getAgentPerformance(database) {
+  const profiles = listAgentProfiles(database);
+  const events = listEvents(database);
+  return profiles.map((profile) => {
+    const assigned = events.filter((event) => event.agent_profile_id === profile.agent_id);
+    const completed = assigned.filter((event) => event.execution_status === 'completed');
+    const attention = assigned.filter((event) => ['blocked', 'failed', 'waiting_for_approval'].includes(event.execution_status));
+    const active = assigned.filter((event) => ['in_progress', 'queued'].includes(event.execution_status));
+    const retryTotal = assigned.reduce((total, event) => total + event.retry_count, 0);
+    const validated = completed.filter((event) => event.validation.length > 0);
+    return {
+      ...profile,
+      totalTasks: assigned.length,
+      completedTasks: completed.length,
+      attentionTasks: attention.length,
+      activeTasks: active.length,
+      failedTasks: assigned.filter((event) => event.execution_status === 'failed').length,
+      retryTotal,
+      completionRate: assigned.length ? Math.round((completed.length / assigned.length) * 100) : null,
+      attentionRate: assigned.length ? Math.round((attention.length / assigned.length) * 100) : null,
+      averageRetries: assigned.length ? Number((retryTotal / assigned.length).toFixed(1)) : null,
+      validationCoverage: completed.length ? Math.round((validated.length / completed.length) * 100) : null,
+      hasEnoughData: assigned.length >= 3,
+    };
+  });
+}
+
 function getSummary(database) {
   const totals = database.prepare(`
     SELECT
@@ -224,4 +251,4 @@ function closeDatabase(database) {
   database.close();
 }
 
-module.exports = { closeDatabase, createAgentProfile, defaultDatabasePath, getSummary, listAgentProfiles, listEvents, openDatabase, recordEvent };
+module.exports = { closeDatabase, createAgentProfile, defaultDatabasePath, getAgentPerformance, getSummary, listAgentProfiles, listEvents, openDatabase, recordEvent };

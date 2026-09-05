@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
-const { closeDatabase, createAgentProfile, defaultDatabasePath, getSummary, listAgentProfiles, listEvents, openDatabase, recordEvent } = require('../storage/database');
+const { closeDatabase, createAgentProfile, defaultDatabasePath, getAgentPerformance, getSummary, listAgentProfiles, listEvents, openDatabase, recordEvent } = require('../storage/database');
 const { getFilterCatalog } = require('./catalog');
 const { normalizeEvent } = require('../collector/collect');
 
@@ -62,6 +62,7 @@ function dashboardData(databasePath, filters) {
       summary: getSummary(database),
       events,
       agents: listAgentProfiles(database),
+      agentPerformance: getAgentPerformance(database),
       filters: getFilterCatalog(allEvents),
     };
   } finally {
