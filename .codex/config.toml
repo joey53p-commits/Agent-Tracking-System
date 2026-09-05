@@ -1,0 +1,5 @@
+[agents]
+# Keep routine parallel work bounded. The coordinating agent is not counted here.
+max_concurrent_threads_per_session = 2
+default_subagent_model = "gpt-5.6-terra"
+default_subagent_reasoning_effort = "medium"

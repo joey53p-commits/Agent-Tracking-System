@@ -7,7 +7,7 @@ The registry gives each agent a stable identity within a project. A task records
 - **Runtime** — Codex, ChatGPT, or Other for this execution.
 - **Model** — the model used for this execution, when known.
 
-The dashboard seeds the seven initial Rise profiles: Manager, Reviewer, Front-End Agent, Back-End Agent, Generalist Coder, QA Agent, and Release Agent. Add profiles in the local Agent Registry panel as the team changes.
+The dashboard seeds the six initial Agent Tracking System profiles: Foundation & Architecture; Telemetry, Privacy & Data Collection; Metrics, Roles & Evaluation; Backend, Database & Integrations; Dashboard UX & Frontend; and QA, Security & Pilot Review. These are the delivery-team roles defined in [the team charter](agent-team.md). Add profiles in the local Agent Registry panel as the team changes.
 
 GitHub Actions is intentionally not an agent profile. It is an automation and evidence source, so a future CI import should attach workflow results to the task it validates rather than treat the workflow as a performer.
 

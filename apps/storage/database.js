@@ -56,13 +56,13 @@ const schema = `
 `;
 
 const starterAgents = [
-  ['rise-manager', 'Rise Manager', 'Delivery management'],
-  ['rise-reviewer', 'Rise Reviewer', 'Review & quality'],
-  ['rise-frontend', 'Rise Front-End Agent', 'Front-end implementation'],
-  ['rise-backend', 'Rise Back-End Agent', 'Backend & data'],
-  ['rise-generalist', 'Rise Generalist Coder', 'General implementation'],
-  ['rise-qa', 'Rise QA Agent', 'Quality assurance'],
-  ['rise-release', 'Rise Release Agent', 'Release & infrastructure'],
+  ['ats-foundation', 'Foundation & Architecture', 'Architecture & delivery', 'gpt-5.6-terra'],
+  ['ats-telemetry', 'Telemetry, Privacy & Data Collection', 'Telemetry & privacy', 'gpt-5.6-terra'],
+  ['ats-metrics', 'Metrics, Roles & Evaluation', 'Metrics & evaluation', 'gpt-5.6-terra'],
+  ['ats-backend', 'Backend, Database & Integrations', 'Backend & integrations', 'gpt-5.6-terra'],
+  ['ats-dashboard', 'Dashboard UX & Frontend', 'Dashboard & frontend', 'gpt-5.6-terra'],
+  ['ats-qa', 'QA, Security & Pilot Review', 'QA, security & pilot review', 'gpt-5.6-terra'],
+  ['ats-explorer', 'Support Explorer', 'Read-only evidence gathering', 'gpt-5.6-luna'],
 ];
 
 function assertDatabaseLocation(databasePath) {
@@ -103,16 +103,16 @@ function ensureEventColumns(database) {
 function seedStarterAgents(database) {
   const profile = database.prepare(`
     INSERT OR IGNORE INTO agent_profiles (agent_id, display_name, runtime, default_model, active, created_at)
-    VALUES (?, ?, 'Codex', NULL, 1, ?)
+    VALUES (?, ?, 'Codex', ?, 1, ?)
   `);
   const assignment = database.prepare(`
     INSERT OR IGNORE INTO agent_assignments (assignment_id, agent_id, project, role, active)
-    VALUES (?, ?, 'Rise', ?, 1)
+    VALUES (?, ?, 'Agent Tracking System', ?, 1)
   `);
   const createdAt = new Date().toISOString();
-  for (const [agentId, displayName, role] of starterAgents) {
-    profile.run(agentId, displayName, createdAt);
-    assignment.run(`${agentId}-rise`, agentId, role);
+  for (const [agentId, displayName, role, defaultModel] of starterAgents) {
+    profile.run(agentId, displayName, defaultModel, createdAt);
+    assignment.run(`${agentId}-agent-tracking-system`, agentId, role);
   }
 }
 

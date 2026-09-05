@@ -11,9 +11,11 @@ can evolve and be released independently.
 
 1. Read [the data contract](docs/data-contract.md) and [privacy rules](docs/privacy.md).
 2. Review [the pilot measurement plan](docs/measurement-plan.md).
-3. Use `node apps/collector/collect.js --input examples/rise-task-event.json --dry-run` to validate a safe event.
-4. Store normalized events in the local SQLite database under `data/` (ignored by Git).
-5. Start the local dashboard with `npm run dashboard`, then open `http://127.0.0.1:4173`.
+3. Read [the agent-team charter](docs/agent-team.md) before delegating or changing a cross-cutting component.
+4. Use [model routing](docs/model-routing.md) to select the task's model and effort.
+5. Use `node apps/collector/collect.js --input examples/rise-task-event.json --dry-run` to validate a safe event.
+6. Store normalized events in the local SQLite database under `data/` (ignored by Git).
+7. Start the local dashboard with `npm run dashboard`, then open `http://127.0.0.1:4173`.
 
 ## Scope
 
