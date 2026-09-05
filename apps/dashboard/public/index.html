@@ -26,8 +26,10 @@
           <label class="wide">Task title<input id="task-title" name="task-title" maxlength="160" required placeholder="e.g. Validate exercise-library filters"></label>
           <label>Project<select id="form-project" required></select></label>
           <label>Workstream<select id="form-workstream" required></select></label>
-          <label>Agent<input id="agent" maxlength="80" required value="Codex"></label>
-          <label>Model<input id="model" maxlength="80" placeholder="Optional"></label>
+          <label>Agent profile<select id="agent-profile" required></select></label>
+          <label>Runtime<select id="runtime" required></select></label>
+          <label>Model<select id="model"></select></label>
+          <p id="agent-context" class="agent-context">Select an agent profile to record the role that performed this work.</p>
           <label>Status<select id="form-status" required></select></label>
           <label>Outcome<select id="outcome" required></select></label>
           <label>Retries<input id="retry-count" type="number" min="0" max="99" value="0" required></label>
@@ -44,6 +46,24 @@
           </details>
           <div class="form-actions wide"><p id="form-message" role="status" aria-live="polite"></p><button type="submit">Record task</button></div>
         </form>
+      </section>
+
+      <section class="panel registry-panel" aria-labelledby="registry-title">
+        <div class="panel-heading">
+          <div><p class="eyebrow">AGENT REGISTRY</p><h2 id="registry-title">People-shaped roles, stable profiles</h2></div>
+          <p class="capture-note">Profiles identify the individual agent and its project role. Runtime and model are recorded separately for each task.</p>
+        </div>
+        <div id="agent-list" class="agent-list"></div>
+        <details class="add-agent"><summary>Add an agent profile</summary>
+          <form id="agent-form" class="agent-form">
+            <label>Agent name<input id="agent-name" maxlength="80" required placeholder="e.g. Rise Data Reviewer"></label>
+            <label>Project<select id="agent-project" required></select></label>
+            <label>Role<input id="agent-role" maxlength="80" required placeholder="e.g. Data review"></label>
+            <label>Runtime<select id="agent-runtime" required></select></label>
+            <label>Default model<select id="agent-model"></select></label>
+            <div class="form-actions"><p id="agent-message" role="status" aria-live="polite"></p><button type="submit">Add agent</button></div>
+          </form>
+        </details>
       </section>
 
       <section class="filters" aria-label="Filter tracked tasks">

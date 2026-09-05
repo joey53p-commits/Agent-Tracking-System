@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
-const { closeDatabase, defaultDatabasePath, getSummary, listEvents, openDatabase } = require('../storage/database');
+const { closeDatabase, createAgentProfile, defaultDatabasePath, getSummary, listAgentProfiles, listEvents, openDatabase, recordEvent } = require('../storage/database');
 const { getFilterCatalog } = require('./catalog');
 const { normalizeEvent } = require('../collector/collect');
 
@@ -46,7 +46,6 @@ function saveDashboardEvent(databasePath, candidate) {
   const event = normalizeEvent(candidate);
   const database = openDatabase(databasePath);
   try {
-    const { recordEvent } = require('../storage/database');
     recordEvent(database, event);
     return event;
   } finally {
@@ -62,11 +61,19 @@ function dashboardData(databasePath, filters) {
     return {
       summary: getSummary(database),
       events,
+      agents: listAgentProfiles(database),
       filters: getFilterCatalog(allEvents),
     };
   } finally {
     closeDatabase(database);
   }
+}
+
+function saveAgentProfile(databasePath, candidate) {
+  const text = (value, maximum) => typeof value === 'string' && value.trim().length > 0 && value.trim().length <= maximum;
+  if (!text(candidate?.displayName, 80) || !text(candidate?.project, 80) || !text(candidate?.role, 80) || !['Codex', 'ChatGPT', 'Other'].includes(candidate?.runtime) || (candidate.defaultModel != null && !text(candidate.defaultModel, 80))) throw new Error('Invalid agent profile.');
+  const database = openDatabase(databasePath);
+  try { return createAgentProfile(database, { displayName: candidate.displayName.trim(), project: candidate.project.trim(), role: candidate.role.trim(), runtime: candidate.runtime, defaultModel: candidate.defaultModel?.trim() || null }); } finally { closeDatabase(database); }
 }
 
 function createDashboardServer({ databasePath = defaultDatabasePath } = {}) {
@@ -93,6 +100,15 @@ function createDashboardServer({ databasePath = defaultDatabasePath } = {}) {
       }
     }
 
+    if (request.method === 'GET' && url.pathname === '/api/agents') {
+      const database = openDatabase(databasePath);
+      try { return sendJson(response, 200, { agents: listAgentProfiles(database, { project: url.searchParams.get('project') || undefined }) }); } finally { closeDatabase(database); }
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/agents') {
+      try { return sendJson(response, 201, { agent: saveAgentProfile(databasePath, await readJsonRequest(request)) }); } catch { return sendJson(response, 400, { error: 'Unable to add the agent. Check the required profile fields.' }); }
+    }
+
     const asset = request.method === 'GET' ? staticFiles[url.pathname] : null;
     if (!asset) return sendJson(response, 404, { error: 'Not found' });
     response.writeHead(200, { 'Content-Type': asset.contentType, 'Cache-Control': 'no-store' });
@@ -110,4 +126,4 @@ function startDashboard({ port = Number(process.env.PORT || 4173), databasePath 
 
 if (require.main === module) startDashboard();
 
-module.exports = { createDashboardServer, dashboardData, saveDashboardEvent, startDashboard };
+module.exports = { createDashboardServer, dashboardData, saveAgentProfile, saveDashboardEvent, startDashboard };

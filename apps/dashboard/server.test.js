@@ -77,3 +77,18 @@ test('records safe dashboard submissions and rejects private task content', asyn
   fs.rmSync(`${testDatabasePath}-wal`, { force: true });
   fs.rmSync(`${testDatabasePath}-shm`, { force: true });
 });
+
+test('serves seeded agent profiles and accepts a project role assignment', async () => {
+  fs.rmSync(testDatabasePath, { force: true });
+  const server = createDashboardServer({ databasePath: testDatabasePath });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const seeded = await request(server, { pathname: '/api/agents?project=Rise' });
+  const created = await request(server, { method: 'POST', pathname: '/api/agents', body: { displayName: 'Rise Data Reviewer', project: 'Rise', role: 'Data review', runtime: 'Codex', defaultModel: 'GPT-5.6 Sol' } });
+  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  assert.equal(JSON.parse(seeded.body).agents.some((agent) => agent.agent_id === 'rise-reviewer'), true);
+  assert.equal(created.statusCode, 201);
+  assert.equal(JSON.parse(created.body).agent.role, 'Data review');
+  fs.rmSync(testDatabasePath, { force: true });
+  fs.rmSync(`${testDatabasePath}-wal`, { force: true });
+  fs.rmSync(`${testDatabasePath}-shm`, { force: true });
+});

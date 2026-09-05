@@ -12,7 +12,8 @@ function normalizeEvent(candidate, now = new Date().toISOString()) {
     eventId: candidate.eventId || randomUUID(),
     recordedAt: candidate.recordedAt || now,
     task: { id: candidate.task?.id, title: candidate.task?.title, project: candidate.task?.project, workstream: candidate.task?.workstream },
-    execution: { agent: candidate.execution?.agent, model: candidate.execution?.model || null, startedAt: candidate.execution?.startedAt, completedAt: candidate.execution?.completedAt || null, status: candidate.execution?.status },
+    assignment: { agentId: candidate.assignment?.agentId || null, role: candidate.assignment?.role || null },
+    execution: { agent: candidate.execution?.agent, runtime: candidate.execution?.runtime || null, model: candidate.execution?.model || null, startedAt: candidate.execution?.startedAt, completedAt: candidate.execution?.completedAt || null, status: candidate.execution?.status },
     outcome: { result: candidate.outcome?.result || 'unknown', retryCount: candidate.outcome?.retryCount ?? 0, blocker: candidate.outcome?.blocker || null, validation: candidate.outcome?.validation || [] },
     references: { repository: candidate.references?.repository || null, branch: candidate.references?.branch || null, commit: candidate.references?.commit || null, changedFiles: candidate.references?.changedFiles || [] },
   };
