@@ -1,6 +1,6 @@
 name = "builder"
 description = "Implements scoped Agent Tracking System database, ingestion, API, dashboard, test, and documentation work."
-model = "gpt-6-sol"
+model = "gpt-5.6-terra"
 model_reasoning_effort = "medium"
 
 developer_instructions = """

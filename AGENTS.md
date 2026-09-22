@@ -9,13 +9,13 @@ collecting prompts, source code, credentials, or raw tool output by default.
 
 The active chat is the **Primary Manager / Integrator**. It owns scope,
 sequencing, architecture, integration, user communication, and final acceptance.
-It runs on `gpt-6-sol` at `medium` effort for new project tasks.
+It runs on `gpt-5.6-terra` at `medium` effort for new project tasks.
 
 Use only these project-local child agents:
 
 | Work | Agent | Model and effort |
 | --- | --- | --- |
-| Database, ingestion, APIs, dashboard, tests, and documentation | `builder` | `gpt-6-sol` / `medium` |
+| Database, ingestion, APIs, dashboard, tests, and documentation | `builder` | `gpt-5.6-terra` / `medium` |
 | Metrics, data contracts, privacy, security, correctness, and evidence review | `data_trust_reviewer` | `gpt-6-sol` / `medium` |
 | Bounded file discovery, inventories, and execution tracing | `scout` | `gpt-6-luna` / `low` |
 

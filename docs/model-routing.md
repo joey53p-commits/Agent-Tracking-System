@@ -2,15 +2,16 @@
 
 ## Defaults
 
-The manager, builder, and data/trust reviewer use `gpt-6-sol` at `medium`
-effort. The scout uses `gpt-6-luna` at `low` effort. The project allows at most
-two concurrent child agents, though normal implementation and review are
-sequential.
+The manager and builder use `gpt-5.6-terra` at `medium` effort. The data/trust
+reviewer uses `gpt-6-sol` at `medium` effort, and the scout uses `gpt-6-luna`
+at `low` effort. The project allows at most two concurrent child agents, though
+normal implementation and review are sequential.
 
 | Task class | Model and effort | Typical work |
 | --- | --- | --- |
 | Support | `gpt-6-luna` / `low` | Bounded discovery, inventories, and execution tracing |
-| Standard | `gpt-6-sol` / `medium` | Planning, implementation, tests, dashboard work, metric review, and routine privacy review |
+| Standard implementation | `gpt-5.6-terra` / `medium` | Planning, implementation, tests, dashboard work, and routine integration |
+| Independent review | `gpt-6-sol` / `medium` | Metric review, data contracts, privacy, security, correctness, and evidence quality |
 | High-consequence | `gpt-6-astra` / `high` | Consequential privacy/security decisions, major architecture, significant data-loss risk, or final high-risk release decisions |
 
 Do not increase reasoning effort merely because a task is large or important.
