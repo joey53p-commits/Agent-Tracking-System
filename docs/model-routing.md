@@ -2,34 +2,25 @@
 
 ## Defaults
 
-All six delivery roles use `gpt-5.6-terra` at `medium` effort. The
-read-only `support_explorer` uses `gpt-5.6-luna` at `low` effort. The project
-limits routine parallel work to two subagents per coordinating session.
+The manager, builder, and data/trust reviewer use `gpt-6-sol` at `medium`
+effort. The scout uses `gpt-6-luna` at `low` effort. The project allows at most
+two concurrent child agents, though normal implementation and review are
+sequential.
 
 | Task class | Model and effort | Typical work |
 | --- | --- | --- |
-| Support | Luna low | File inventories, safe summaries, metadata checks, first-pass classification |
-| Standard | Terra medium | Normal scoped implementation, review, planning, tests, and dashboard work |
-| Complex | Sol medium | Failed validation after two focused attempts, difficult migrations, hidden cross-component bugs, or external integration work |
-| High-consequence | Astra high | Cross-system architecture, material privacy/security issue, or final high-risk release decision |
+| Support | `gpt-6-luna` / `low` | Bounded discovery, inventories, and execution tracing |
+| Standard | `gpt-6-sol` / `medium` | Planning, implementation, tests, dashboard work, metric review, and routine privacy review |
+| High-consequence | `gpt-6-astra` / `high` | Consequential privacy/security decisions, major architecture, significant data-loss risk, or final high-risk release decisions |
 
-## Escalation rules
+Do not increase reasoning effort merely because a task is large or important.
+Escalation requires material ambiguity, repeated focused failure, conflicting
+evidence, or a costly-to-reverse consequence. Do not use `xhigh` or `max` as a
+routine setting.
 
-Escalation requires evidence, not a role title. Move beyond Terra medium only
-when at least one is true:
+## Runtime verification
 
-- Two focused attempts did not resolve the issue.
-- Requirements or evidence conflict materially.
-- The change crosses systems and a wrong decision would be costly to reverse.
-- The work changes privacy, security, telemetry collection, data retention, or
-  a production-release boundary.
-
-Do not escalate merely because a task is large, important-sounding, or assigned
-to backend, QA, or management. Do not use `xhigh` or `max` as a routine setting.
-
-## Review and measurement
-
-The delivery manager selects an escalation explicitly at task launch and records
-the task class, model, effort, validation evidence, and outcome. Review model
-effectiveness only within comparable task classes; account for sample size,
-rework, and validation status before changing a default.
+Project files express intended routing. They do not prove the runtime honored
+it. After routing changes, start a fresh project task and verify the observed
+role, model, effort, sandbox, and working directory. Existing tasks retain the
+settings with which they were started unless explicitly overridden.

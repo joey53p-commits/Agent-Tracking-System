@@ -5,63 +5,64 @@
 Build a private, local-first system for understanding coding-agent work without
 collecting prompts, source code, credentials, or raw tool output by default.
 
-## Team and routing
+## Team
 
-The active chat is the **Foundation & Architecture** lead. It owns scope,
-cross-cutting decisions, integration order, and final acceptance.
+The active chat is the **Primary Manager / Integrator**. It owns scope,
+sequencing, architecture, integration, user communication, and final acceptance.
+It runs on `gpt-6-sol` at `medium` effort for new project tasks.
 
-Route work to one primary owner:
+Use only these project-local child agents:
 
-| Work | Primary owner | Required partner when material |
+| Work | Agent | Model and effort |
 | --- | --- | --- |
-| Architecture, delivery sequencing, cross-cutting changes | Foundation & Architecture | QA, Security & Pilot Review |
-| Telemetry, import adapters, redaction, retention | Telemetry, Privacy & Data Collection | Backend, Database & Integrations; QA, Security & Pilot Review |
-| Metric definitions, role registry, outcomes, model evaluation | Metrics, Roles & Evaluation | Dashboard UX & Frontend |
-| Database schema, ingestion, APIs, Git/CI adapters | Backend, Database & Integrations | Telemetry, Privacy & Data Collection |
-| Dashboard interface and local interaction design | Dashboard UX & Frontend | Metrics, Roles & Evaluation |
-| Tests, privacy review, security review, pilot gates | QA, Security & Pilot Review | Owner of the reviewed work |
+| Database, ingestion, APIs, dashboard, tests, and documentation | `builder` | `gpt-6-sol` / `medium` |
+| Metrics, data contracts, privacy, security, correctness, and evidence review | `data_trust_reviewer` | `gpt-6-sol` / `medium` |
+| Bounded file discovery, inventories, and execution tracing | `scout` | `gpt-6-luna` / `low` |
 
-Do not give two agents concurrent write ownership of the same files. Split
-independent work by directory or wait for a completed handoff before editing
-shared schema, storage, or dashboard files.
+`gpt-6-astra` at `high` effort is an explicit temporary escalation for a
+consequential privacy or security decision, major architecture change,
+significant data-loss risk, or final high-risk release decision. It is not a
+standing role.
 
-## Delegation policy
+## Delegation rules
 
-Use parallel agents only when the work is independent and the expected quality
-or speed benefit is meaningful. Prefer one agent for focused changes. For broad
-changes, delegate discovery or review in parallel, then let one named owner
-integrate the resulting edits. Each subtask must state its deliverable,
-non-goals, validation required, and files or boundaries it owns.
+- Handle explanation, planning, support, and genuinely trivial low-risk edits
+  in the manager when delegation would add no independent value.
+- Delegate meaningful implementation to `builder`. Meaningful implementation
+  includes multi-file behavior, schema or storage changes, ingestion, APIs,
+  dashboard workflows, and new tested capabilities.
+- After a material implementation, delegate an independent read-only review to
+  `data_trust_reviewer`. A change is material when it affects stored data,
+  metrics, privacy, security, cross-component behavior, or a release claim.
+- Use `scout` only when a bounded read-only investigation will materially save
+  time or improve evidence. Do not spawn it for routine file lookup.
+- Select the named custom agent explicitly. Preserve its configured model,
+  effort, and sandbox. Do not replace it with a generic worker or reviewer.
+- Never give two agents concurrent write ownership of the same files or shared
+  contract. Normally run the builder and reviewer sequentially.
+- Keep at most two child agents open concurrently, and only parallelize work
+  with independent boundaries.
 
-Before delegating material work, follow `docs/manager-launch-protocol.md`.
-Foundation & Architecture is the Delivery Manager and Integrator; it selects
-the owner, review gate, task class, and whether work is parallel or sequenced.
+Every delegated task must state its goal, non-goals, owned files or boundary,
+required validation, and expected handoff. The manager reviews each handoff,
+runs or checks proportionate validation, and accepts, returns for rework, or
+escalates the result.
 
-Use the project-local custom agent profiles in `.codex/agents/` and follow
-`docs/model-routing.md`. Terra medium is the delivery-team default; Luna low is
-for bounded support work. Sol medium and Astra high are explicit escalations,
-not role defaults. Do not infer cost, quota usage, or model quality from
-incomplete telemetry.
+## Safety boundaries
 
-## Required safety boundaries
-
-- Keep the dashboard local-first and bound local services to `127.0.0.1`.
-- Never enable user-level Codex telemetry, alter `~/.codex` configuration, or
-  contact a remote collector without explicit user approval.
+- Keep the dashboard local-first and bind local services to `127.0.0.1`.
+- Never enable user-level telemetry, modify `~/.codex`, contact a remote
+  collector, or broaden collected data without explicit user approval.
 - Exclude credentials, `.env` contents, prompt text, source code, transcripts,
-  and raw tool arguments/output from stored records unless the user explicitly
-  approves a redacted, documented exception.
-- Treat external repositories as read-only evidence sources unless the user
-  explicitly asks to modify them.
-- Preserve unrelated work and avoid destructive Git commands.
+  and raw tool arguments or output from stored records unless the user approves
+  a documented, redacted exception.
+- Preserve unrelated work and avoid destructive Git operations.
+- Treat missing evidence as unknown. Do not infer productivity, quality, cost,
+  or acceptance from activity volume alone.
 
-## Delivery protocol
+## Completion standard
 
-1. Inspect the relevant source, tests, and documentation before proposing edits.
-2. Update the architecture, data contract, privacy policy, or measurement plan
-   when behavior or a measurement definition changes.
-3. Add focused automated tests for new behavior and run the relevant checks.
-4. Report the files changed, validation evidence, privacy impact, and any
-   remaining limitation or follow-up.
-
-The source of truth for the full role charter is `docs/agent-team.md`.
+Report the behavior delivered, files changed, validation evidence, privacy or
+data impact, and unresolved risks. Configuration presence alone does not prove
+routing: when routing behavior changes, verify the observed child role, model,
+effort, sandbox, and working directory in a fresh task.
