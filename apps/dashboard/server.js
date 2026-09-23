@@ -3,6 +3,7 @@ const http = require('node:http');
 const path = require('node:path');
 const { closeDatabase, createAgentProfile, defaultDatabasePath, getAgentPerformance, getRolloutOverview, getSummary, listAgentProfiles, listEvents, openDatabase, recordEvent } = require('../storage/database');
 const { getFilterCatalog } = require('./catalog');
+const { inspectRegisteredProjectGitActivity } = require('./git-activity');
 const { normalizeEvent } = require('../collector/collect');
 
 const publicDirectory = path.join(__dirname, 'public');
@@ -71,15 +72,19 @@ function dashboardData(databasePath, filters) {
   }
 }
 
-function registeredRolloutProjects(projectConfigPath = defaultProjectConfigPath) {
+function registeredProjectsFromConfig(projectConfigPath = defaultProjectConfigPath) {
   try {
     const { readProjectConfig } = require('C:\\Users\\jwlin\\.codex\\agent-ops\\record-hook.js');
-    return readProjectConfig(projectConfigPath).map(({ id, name }) => ({ id, name }));
+    return readProjectConfig(projectConfigPath);
   } catch {
     // The dashboard remains read-only if local observer configuration is not
     // available. It must not expose configuration paths or errors to the UI.
     return [];
   }
+}
+
+function registeredRolloutProjects(projectConfigPath = defaultProjectConfigPath) {
+  return registeredProjectsFromConfig(projectConfigPath).map(({ id, name }) => ({ id, name }));
 }
 
 function rolloutOverviewData(databasePath, registeredProjects = registeredRolloutProjects()) {
@@ -89,6 +94,15 @@ function rolloutOverviewData(databasePath, registeredProjects = registeredRollou
   } finally {
     closeDatabase(database);
   }
+}
+
+function projectGitOverviewData(registeredProjects = registeredProjectsFromConfig()) {
+  // Repository paths remain transient local inspection inputs. The projection
+  // contains safe project names and derived Git timestamps/statuses only.
+  return {
+    observedAt: new Date().toISOString(),
+    ...inspectRegisteredProjectGitActivity(registeredProjects),
+  };
 }
 
 function saveAgentProfile(databasePath, candidate) {
@@ -118,6 +132,14 @@ function createDashboardServer({ databasePath = defaultDatabasePath, registeredP
         return sendJson(response, 200, rolloutOverviewData(databasePath, registeredProjects));
       } catch {
         return sendJson(response, 500, { error: 'Unable to load local rollout overview data.' });
+      }
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/project-overview') {
+      try {
+        return sendJson(response, 200, projectGitOverviewData(registeredProjects));
+      } catch {
+        return sendJson(response, 500, { error: 'Unable to load local project Git activity.' });
       }
     }
 
@@ -159,4 +181,4 @@ function startDashboard({ port = Number(process.env.PORT || 4173), databasePath,
 
 if (require.main === module) startDashboard();
 
-module.exports = { createDashboardServer, dashboardData, registeredRolloutProjects, rolloutOverviewData, saveAgentProfile, saveDashboardEvent, startDashboard };
+module.exports = { createDashboardServer, dashboardData, projectGitOverviewData, registeredProjectsFromConfig, registeredRolloutProjects, rolloutOverviewData, saveAgentProfile, saveDashboardEvent, startDashboard };

@@ -46,6 +46,12 @@ packages/
 data/              local database and exports; never committed
 ```
 
+The project Overview additionally shows safe local Git stages for each already
+registered project: latest workspace-file modification (tracked and non-ignored
+untracked files), latest local commit, and
+last locally recorded push. These are independent local facts; push and
+remote-relationship readings are never represented as GitHub verification.
+
 ## Guardrails
 
 - Do not collect API keys, access tokens, credentials, or `.env` content.

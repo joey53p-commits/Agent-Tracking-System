@@ -23,3 +23,7 @@ browser never discovers files, runs ingestion, or writes rollout records.
 The two processes have separate entry points: `npm run dashboard` serves the
 local API only; `npm run monitor:once` performs one explicit collection cycle;
 and `npm run monitor:continuous` is the only command that schedules polling.
+
+The dashboard may also make a read-only local Git inspection for each already
+registered project, producing a separate project overview projection. It never
+changes repositories or monitor data, and it does not use Git network commands.

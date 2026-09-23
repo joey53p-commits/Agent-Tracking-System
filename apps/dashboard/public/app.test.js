@@ -13,7 +13,7 @@ function loadContext({ fetch } = {}) {
     '#rollout-project-list': { innerHTML: '' },
   };
   const context = { document: { querySelector: (selector) => elements[selector] }, fetch, Intl, Date, Number, String };
-  vm.runInNewContext(`${setup}; globalThis.render = renderRolloutOverview; globalThis.loadRollout = loadRolloutOverview;`, context);
+  vm.runInNewContext(`${setup}; globalThis.render = renderRolloutOverview; globalThis.loadRollout = loadRolloutOverview; globalThis.loadGit = loadProjectGitOverview; globalThis.setGitData = (data) => { projectGitOverviewData = data; };`, context);
   return { context, elements };
 }
 
@@ -83,4 +83,39 @@ test('multiple projects label each task and usage section with its registered pr
   assert.match(elements['#rollout-project-list'].innerHTML, /Tasks — Agent Tracking System/);
   assert.match(elements['#rollout-project-list'].innerHTML, /Agent \/ role totals — Rise/);
   assert.match(elements['#rollout-project-list'].innerHTML, /aria-label="Rise usage summary"/);
+});
+
+test('project Git activity identifies the local observation time and includes workspace state', () => {
+  const { context, elements } = loadContext();
+  context.setGitData({ observedAt: '2026-09-15T12:15:00.000Z', projects: [{
+    project: { name: 'Agent Tracking System' },
+    localFiles: { state: 'modified', latestModificationAt: '2026-09-15T12:14:00.000Z' },
+    commit: { state: 'available', committedAt: '2026-09-15T11:00:00.000Z', shortCommitId: 'abcdef0' },
+    push: { state: 'unavailable' },
+    remoteRelationship: { state: 'up_to_date', ahead: 0, behind: 0 },
+  }] });
+  context.render({ hasRolloutRecords: false, projects: [project('Agent Tracking System', { latestIngestionAt: null })] });
+  assert.match(elements['#rollout-project-list'].innerHTML, /Observed locally/);
+  assert.match(elements['#rollout-project-list'].innerHTML, /Last local workspace-file change/);
+  assert.match(elements['#rollout-project-list'].innerHTML, /Modified locally/);
+  assert.match(elements['#rollout-project-list'].innerHTML, /Refreshes while this dashboard is open are read-only/);
+});
+
+test('project Git refresh shares one in-flight request and renders its completed response', async () => {
+  let calls = 0;
+  let release;
+  const { context, elements } = loadContext({ fetch: async () => {
+    calls += 1;
+    await new Promise((resolve) => { release = resolve; });
+    return { ok: true, json: async () => ({ observedAt: '2026-09-15T12:15:00.000Z', projects: [] }) };
+  } });
+  context.render({ hasRolloutRecords: false, projects: [project('Agent Tracking System', { latestIngestionAt: null })] });
+  const first = context.loadGit();
+  const second = context.loadGit();
+  assert.equal(first, second);
+  assert.equal(calls, 1);
+  release();
+  await first;
+  assert.equal(calls, 1);
+  assert.match(elements['#rollout-project-list'].innerHTML, /Git activity/);
 });

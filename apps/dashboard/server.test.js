@@ -1,6 +1,8 @@
 const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
+const os = require('node:os');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const test = require('node:test');
@@ -26,6 +28,27 @@ function request(server, { method = 'GET', pathname, body }) {
 
 function removeDatabase(databasePath) {
   for (const suffix of ['', '-wal', '-shm']) fs.rmSync(`${databasePath}${suffix}`, { force: true });
+}
+
+function git(directory, arguments_) {
+  return execFileSync('git', ['-C', directory, ...arguments_], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
+function createGitFixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-tracking-dashboard-api-'));
+  const repositoryPath = path.join(root, 'work');
+  const remotePath = path.join(root, 'remote.git');
+  fs.mkdirSync(repositoryPath);
+  git(repositoryPath, ['init']);
+  git(repositoryPath, ['config', 'user.name', 'Dashboard fixture']);
+  git(repositoryPath, ['config', 'user.email', 'dashboard@example.invalid']);
+  fs.writeFileSync(path.join(repositoryPath, 'tracked.txt'), 'fixture\n');
+  git(repositoryPath, ['add', 'tracked.txt']);
+  git(repositoryPath, ['commit', '-m', 'fixture']);
+  execFileSync('git', ['init', '--bare', remotePath], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  git(repositoryPath, ['remote', 'add', 'origin', remotePath]);
+  git(repositoryPath, ['push', '--set-upstream', 'origin', 'HEAD']);
+  return { root, repositoryPath };
 }
 
 function persistRolloutFixture(databasePath, {
@@ -131,6 +154,32 @@ test('dashboard startup only serves the local API and never schedules or starts 
     if (server?.listening) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     removeDatabase(databasePath);
     fs.rmSync(lockPath, { force: true });
+  }
+});
+
+test('project overview exposes only safe derived local Git activity from an isolated local repository fixture', async () => {
+  const databasePath = path.join(__dirname, `../../data/project-overview-${randomUUID()}.test.sqlite`);
+  const fixture = createGitFixture();
+  removeDatabase(databasePath);
+  let server;
+  try {
+    server = createDashboardServer({ databasePath, registeredProjects: [{ id: 'fixture', name: 'Fixture project', paths: [fixture.repositoryPath] }] });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const response = await request(server, { pathname: '/api/project-overview' });
+    const data = JSON.parse(response.body);
+    assert.equal(response.statusCode, 200);
+    assert.match(data.observedAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(data.projects.length, 1);
+    assert.equal(data.projects[0].project.name, 'Fixture project');
+    assert.equal(data.projects[0].localFiles.state, 'clean');
+    assert.equal(data.projects[0].commit.state, 'available');
+    assert.equal(data.projects[0].remoteRelationship.evidence, 'local_git_knowledge');
+    assert.equal(privateFieldPresent(data), false);
+    assert.equal(JSON.stringify(data).includes(fixture.repositoryPath), false);
+  } finally {
+    if (server?.listening) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    removeDatabase(databasePath);
+    fs.rmSync(fixture.root, { recursive: true, force: true });
   }
 });
 

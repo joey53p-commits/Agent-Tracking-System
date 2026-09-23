@@ -3,9 +3,11 @@ const runtimeModels = { Codex: ['', 'GPT-6 Astra', 'GPT-5.6 Sol', 'GPT-5.6 Terra
 const pageCopy = { overview: ['LOCAL PILOT', 'Overview', 'See what is moving, what needs attention, and where to focus next.'], work: ['WORK TRACKING', 'Work', 'Record agent work, follow active tasks, and review the evidence behind each result.'], agents: ['AGENT REGISTRY', 'Agents', 'Manage the individual agents and project roles you want to evaluate over time.'], settings: ['LOCAL SETTINGS', 'Settings', 'Review the privacy-first local configuration for this tracker.'] };
 let dashboardData = null;
 let rolloutOverviewData = null;
+let projectGitOverviewData = null;
 let selectedAgentId = null;
 const ROLLOUT_REFRESH_INTERVAL_MS = 15000;
 let rolloutRefreshPromise = null;
+let projectGitRefreshPromise = null;
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c])); }
 function label(value) { return String(value || '').replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()); }
 function populateSelect(id, values, selected, formatter = label) { const select = document.querySelector(`#${id}`); const value = selected ?? select.value; select.innerHTML = ''; values.forEach((item) => select.add(new Option(formatter(item), item, false, item === value))); }
@@ -71,6 +73,32 @@ function renderTrackingStatus(overview) {
   panel.classList.remove('error');
   panel.innerHTML = `<p class="eyebrow">TRACKING STATUS</p><h2>${escapeHtml(label(state))}</h2><div class="tracking-status-details"><div><span>Registered project${names.length === 1 ? '' : 's'}</span><strong>${names.length ? escapeHtml(names.join(' · ')) : 'No registered project available'}</strong></div><div><span>Last successful ingestion</span><strong>${escapeHtml(formatTime(latestIngestionAt))}</strong></div><div><span>Latest source state</span><strong>${escapeHtml(label(state))}</strong></div>${cycleDetails}</div><p>${escapeHtml(trackingStateCopy(state))} The completed-cycle record is historical status only; this page does not indicate whether a monitor is running.</p>`;
 }
+function gitActivityForProject(name) { return projectGitOverviewData?.projects?.find((record) => record.project?.name === name) || null; }
+function gitStateCopy(activity) {
+  if (!activity || activity.state === 'unavailable') return 'Unavailable';
+  if (activity.state === 'modified') return 'Modified locally';
+  if (activity.state === 'clean') return 'Clean working tree';
+  if (activity.state === 'available') return formatTime(activity.pushedAt || activity.committedAt);
+  if (activity.state === 'up_to_date') return 'Up to date';
+  if (activity.state === 'ahead') return `Ahead by ${formatCount(activity.ahead)}`;
+  if (activity.state === 'behind') return `Behind by ${formatCount(activity.behind)}`;
+  if (activity.state === 'diverged') return `Diverged · ${formatCount(activity.ahead)} ahead / ${formatCount(activity.behind)} behind`;
+  return 'Unavailable';
+}
+function renderGitActivity(projectName, observedAt) {
+  const activity = gitActivityForProject(projectName);
+  if (!activity) return '<section class="rollout-section git-activity"><h3>Git activity</h3><p class="quiet">Local Git activity is unavailable because this project has no registered repository inspection result.</p></section>';
+  const local = activity.localFiles || { state: 'unavailable' };
+  const commit = activity.commit || { state: 'unavailable' };
+  const push = activity.push || { state: 'unavailable' };
+  const relationship = activity.remoteRelationship || { state: 'unavailable' };
+  const localTime = local.latestModificationAt ? formatTime(local.latestModificationAt) : 'No local workspace-file timestamp available';
+  const commitTime = commit.committedAt ? formatTime(commit.committedAt) : 'No local commit available';
+  const pushTime = push.pushedAt ? formatTime(push.pushedAt) : 'No local push record available';
+  const commitId = commit.shortCommitId ? ` · ${escapeHtml(commit.shortCommitId)}` : '';
+  const observed = observedAt ? `Observed locally ${formatTime(observedAt)}. Refreshes while this dashboard is open are read-only.` : 'No local Git observation time is available.';
+  return `<section class="rollout-section git-activity"><h3>Git activity</h3><p class="data-note">${escapeHtml(observed)}</p><div class="git-activity-grid" aria-label="${escapeHtml(projectName)} local Git activity"><div><span>Last local workspace-file change</span><strong>${escapeHtml(localTime)}</strong><small>${escapeHtml(gitStateCopy(local))}</small></div><div><span>Last local commit</span><strong>${escapeHtml(commitTime)}${commitId}</strong><small>Local repository record</small></div><div><span>Last locally recorded push</span><strong>${escapeHtml(pushTime)}</strong><small>${push.state === 'available' ? 'Local reflog evidence only — not GitHub verified' : 'Unavailable unless local reflog explicitly records a push'}</small></div><div><span>Current local/remote relationship</span><strong>${escapeHtml(gitStateCopy(relationship))}</strong><small>Local Git knowledge only — not GitHub verified</small></div></div></section>`;
+}
 function renderRolloutOverview(overview) {
   const empty = document.querySelector('#rollout-empty-state');
   const container = document.querySelector('#rollout-project-list');
@@ -91,7 +119,7 @@ function renderRolloutOverview(overview) {
     const roles = record.roles.length
       ? record.roles.map((role) => `<div class="role-row"><strong>${escapeHtml(role.roleLabel)}</strong><span>${formatCount(role.turnCount)} turns · ${formatCount(role.exactTokenTotal)} exact tokens</span></div>`).join('')
       : '<p class="quiet">No project-agent role usage is available yet.</p>';
-    return `<article class="panel rollout-project"><div class="panel-heading"><div><p class="eyebrow">REGISTERED PROJECT</p><h2>${escapeHtml(record.project.name)}</h2></div><p class="capture-note">${escapeHtml(label(state))}</p></div>${healthMarkup}<section class="metrics rollout-metrics" aria-label="${escapeHtml(record.project.name)} usage summary"><article><span>Active / incomplete</span><strong>${formatCount(record.totals.activeTasks)}</strong></article><article><span>Completed</span><strong>${formatCount(record.totals.completedTasks)}</strong></article><article><span>Exact response usage</span><strong>${formatCount(usage.totalTokens)}</strong><small>${formatCount(usage.inputTokens)} in · ${formatCount(usage.outputTokens)} out</small></article></section><section class="rollout-section"><h3>Tasks — ${escapeHtml(record.project.name)}</h3><table class="rollout-table"><thead><tr><th>Task ID</th><th>State</th><th>Turns</th><th>Exact tokens</th><th>Role</th></tr></thead><tbody>${tasks}</tbody></table><p class="data-note">Active / incomplete means no completion event was observed.</p></section><section class="rollout-section"><h3>Agent / role totals — ${escapeHtml(record.project.name)}</h3>${roles}<p class="data-note">Unknown role means the live source did not provide a child-agent label.</p></section></article>`;
+    return `<article class="panel rollout-project"><div class="panel-heading"><div><p class="eyebrow">REGISTERED PROJECT</p><h2>${escapeHtml(record.project.name)}</h2></div><p class="capture-note">${escapeHtml(label(state))}</p></div>${healthMarkup}${renderGitActivity(record.project.name, projectGitOverviewData?.observedAt)}<section class="metrics rollout-metrics" aria-label="${escapeHtml(record.project.name)} usage summary"><article><span>Active / incomplete</span><strong>${formatCount(record.totals.activeTasks)}</strong></article><article><span>Completed</span><strong>${formatCount(record.totals.completedTasks)}</strong></article><article><span>Exact response usage</span><strong>${formatCount(usage.totalTokens)}</strong><small>${formatCount(usage.inputTokens)} in · ${formatCount(usage.outputTokens)} out</small></article></section><section class="rollout-section"><h3>Tasks — ${escapeHtml(record.project.name)}</h3><table class="rollout-table"><thead><tr><th>Task ID</th><th>State</th><th>Turns</th><th>Exact tokens</th><th>Role</th></tr></thead><tbody>${tasks}</tbody></table><p class="data-note">Active / incomplete means no completion event was observed.</p></section><section class="rollout-section"><h3>Agent / role totals — ${escapeHtml(record.project.name)}</h3>${roles}<p class="data-note">Unknown role means the live source did not provide a child-agent label.</p></section></article>`;
   }).join('');
 }
 function showRolloutError() { const panel = document.querySelector('#tracking-status-panel'); document.querySelector('#rollout-empty-state').hidden = true; panel.classList.add('error'); panel.innerHTML = '<p class="eyebrow">TRACKING STATUS</p><h2>Local Overview unavailable</h2><p>The local Overview API could not load, so the displayed tracking data cannot be confirmed. Retry only reloads this read-only local view; it does not start ingestion or change stored data.</p><button id="rollout-retry" class="quiet-button" type="button">Retry</button>'; document.querySelector('#rollout-project-list').innerHTML = ''; document.querySelector('#rollout-retry').addEventListener('click', () => { void loadRolloutOverview(); }); }
@@ -102,8 +130,25 @@ function loadRolloutOverview() {
   })();
   return rolloutRefreshPromise;
 }
-function startRolloutAutoRefresh() { return setInterval(() => loadRolloutOverview(), ROLLOUT_REFRESH_INTERVAL_MS); }
-async function loadDashboard() { const parameters = new URLSearchParams(); filters.forEach((name) => { const value = document.querySelector(`#${name}-filter`).value; if (value) parameters.set(name, value); }); const response = await fetch(`/api/overview?${parameters}`); if (!response.ok) throw new Error('Unable to load local dashboard data.'); dashboardData = await response.json(); populateFilter('project', dashboardData.filters.projects); populateFilter('workstream', dashboardData.filters.workstreams); populateFilter('status', dashboardData.filters.statuses); populateCaptureForm(dashboardData.filters); setStartedAtDefault(); renderWorkstreams(dashboardData.summary.workstreams); renderAgents(dashboardData.agents); renderTasks(dashboardData.events); await loadRolloutOverview(); }
+function loadProjectGitOverview() {
+  if (projectGitRefreshPromise) return projectGitRefreshPromise;
+  projectGitRefreshPromise = (async () => {
+    try {
+      const response = await fetch('/api/project-overview');
+      if (!response.ok) throw new Error('Project Git overview request failed.');
+      projectGitOverviewData = await response.json();
+    } catch {
+      projectGitOverviewData = { projects: [] };
+    } finally {
+      projectGitRefreshPromise = null;
+    }
+    if (rolloutOverviewData) renderRolloutOverview(rolloutOverviewData);
+  })();
+  return projectGitRefreshPromise;
+}
+function refreshProjectOverview() { return Promise.all([loadRolloutOverview(), loadProjectGitOverview()]); }
+function startOverviewAutoRefresh() { return setInterval(() => { void refreshProjectOverview(); }, ROLLOUT_REFRESH_INTERVAL_MS); }
+async function loadDashboard() { const parameters = new URLSearchParams(); filters.forEach((name) => { const value = document.querySelector(`#${name}-filter`).value; if (value) parameters.set(name, value); }); const response = await fetch(`/api/overview?${parameters}`); if (!response.ok) throw new Error('Unable to load local dashboard data.'); dashboardData = await response.json(); populateFilter('project', dashboardData.filters.projects); populateFilter('workstream', dashboardData.filters.workstreams); populateFilter('status', dashboardData.filters.statuses); populateCaptureForm(dashboardData.filters); setStartedAtDefault(); renderWorkstreams(dashboardData.summary.workstreams); renderAgents(dashboardData.agents); renderTasks(dashboardData.events); await loadRolloutOverview(); await loadProjectGitOverview(); }
 function showPage(page, workView) { document.querySelectorAll('[data-page-content]').forEach((item) => item.classList.toggle('active', item.dataset.pageContent === page)); document.querySelectorAll('.nav-item').forEach((item) => item.classList.toggle('active', item.dataset.page === page)); const [eyebrow, title, description] = pageCopy[page]; document.querySelector('#page-eyebrow').textContent = eyebrow; document.querySelector('#page-title').textContent = title; document.querySelector('#page-description').textContent = description; if (page === 'work') showWorkView(workView || 'record'); window.location.hash = page; }
 function showWorkView(view) { document.querySelectorAll('[data-work-content]').forEach((item) => item.classList.toggle('active', item.dataset.workContent === view)); document.querySelectorAll('.subnav-item').forEach((item) => item.classList.toggle('active', item.dataset.workView === view)); }
 function lines(id) { return document.querySelector(`#${id}`).value.split('\n').map((value) => value.trim()).filter(Boolean); }
@@ -116,4 +161,4 @@ document.querySelectorAll('.subnav-item').forEach((button) => button.addEventLis
 filters.forEach((name) => document.querySelector(`#${name}-filter`).addEventListener('change', () => loadDashboard().catch(showError)));
 document.querySelector('#clear-filters').addEventListener('click', () => { filters.forEach((name) => { document.querySelector(`#${name}-filter`).value = ''; }); loadDashboard().catch(showError); });
 document.querySelector('#form-project').addEventListener('change', () => populateAgentProfiles()); document.querySelector('#agent-profile').addEventListener('change', updateActiveProfile); document.querySelector('#runtime').addEventListener('change', () => populateModels('model', document.querySelector('#runtime').value)); document.querySelector('#agent-runtime').addEventListener('change', () => populateModels('agent-model', document.querySelector('#agent-runtime').value)); document.querySelector('#task-form').addEventListener('submit', (event) => submitTask(event).catch((error) => { document.querySelector('#form-message').textContent = error.message; })); document.querySelector('#agent-form').addEventListener('submit', (event) => submitAgent(event).catch((error) => { document.querySelector('#agent-message').textContent = error.message; }));
-loadDashboard().then(() => { const initialPage = location.hash.slice(1); if (pageCopy[initialPage]) showPage(initialPage); startRolloutAutoRefresh(); }).catch(showError);
+loadDashboard().then(() => { const initialPage = location.hash.slice(1); if (pageCopy[initialPage]) showPage(initialPage); startOverviewAutoRefresh(); }).catch(showError);

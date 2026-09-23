@@ -41,3 +41,11 @@ Dashboard startup has no monitor dependency and does not begin collection. A
 one-time local cycle requires `npm run monitor:once`; continuous polling
 requires `npm run monitor:continuous`. The unqualified `npm run monitor`
 command fails closed rather than choosing a collection mode.
+
+The project Git-activity projection reads only repositories already listed in
+the existing registered-project configuration. It exposes derived timestamps,
+a safe short commit ID, working-tree state, local-reflog push evidence, and
+local ahead/behind counts. It does not expose or persist repository paths,
+remote URLs/names, branch names, file names, commit messages/authors, diffs, or
+source content. Git inspection is local-only and does not fetch, pull, push, or
+contact a hosting provider.
