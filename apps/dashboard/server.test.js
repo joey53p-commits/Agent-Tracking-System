@@ -298,7 +298,7 @@ test('rollout overview treats a source-health-only ingestion as a real safe reco
   const databasePath = path.join(__dirname, `../../data/rollout-health-only-${randomUUID()}.test.sqlite`);
   removeDatabase(databasePath);
   persistRolloutFixture(databasePath, { includeTurn: false });
-  const server = createDashboardServer({ databasePath });
+  const server = createDashboardServer({ databasePath, registeredProjects: [] });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const response = await request(server, { pathname: '/api/rollout-overview' });
   await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

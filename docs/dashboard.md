@@ -65,3 +65,10 @@ GitHub. Repository paths, remote URLs/names, branch names, commit messages,
 authors, diffs, and file names are not returned by the API or displayed. The
 panel labels when the local Git projection was observed; it is not a liveness
 signal or GitHub verification.
+
+For a registered local repository that Git rejects because of Windows ownership
+metadata, every inspection command supplies Git an exact, resolved
+`safe.directory` value for that repository only. This is a transient
+per-command allowance: it does not write Git configuration, use wildcards, or
+trust unregistered paths. That path remains an internal inspection input and
+is never returned to the dashboard.

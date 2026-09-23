@@ -4,9 +4,32 @@ const path = require('node:path');
 
 function unavailable(reason) { return { state: 'unavailable', reason }; }
 
-function runGit(repositoryPath, arguments_) {
+function resolvedRepositoryPath(repositoryPath) {
+  if (typeof repositoryPath !== 'string' || !repositoryPath.trim()) return null;
   try {
-    return { ok: true, output: execFileSync('git', ['--no-optional-locks', '-C', repositoryPath, ...arguments_], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }) };
+    // Resolve links before both the Git working directory and safe.directory
+    // value are built. This produces one exact, local path for this command;
+    // it never changes Git's user or system configuration.
+    return fs.realpathSync.native(repositoryPath);
+  } catch {
+    return null;
+  }
+}
+
+function runGit(repositoryPath, arguments_, { execFile = execFileSync } = {}) {
+  const resolvedPath = resolvedRepositoryPath(repositoryPath);
+  if (!resolvedPath) return { ok: false, output: '' };
+  try {
+    return {
+      ok: true,
+      output: execFile('git', [
+        // Some registered OneDrive repositories are owned by a different
+        // Windows identity. Allow only this resolved repository for this one
+        // read-only Git invocation; do not persist a Git configuration value.
+        '-c', `safe.directory=${resolvedPath}`,
+        '--no-optional-locks', '-C', resolvedPath, ...arguments_,
+      ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }),
+    };
   } catch {
     return { ok: false, output: '' };
   }
@@ -95,7 +118,9 @@ function unavailableProjectOverview(project, reason) {
 
 function inspectProjectGitActivity(project, { git = runGit } = {}) {
   if (!project || typeof project.name !== 'string' || !Array.isArray(project.paths) || !project.paths.length) return unavailableProjectOverview(project || { name: 'Unknown project' }, 'repository_not_configured');
-  const repositoryPath = project.paths.find((candidate) => typeof candidate === 'string' && isRepository(candidate, git));
+  const repositoryPath = project.paths
+    .map(resolvedRepositoryPath)
+    .find((candidate) => candidate && isRepository(candidate, git));
   if (!repositoryPath) return unavailableProjectOverview(project, 'not_git_repository');
   return {
     project: { name: project.name },
@@ -117,4 +142,6 @@ module.exports = {
   latestLocallyRecordedPush,
   latestWorkspaceFileModification,
   localRemoteRelationship,
+  resolvedRepositoryPath,
+  runGit,
 };

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { inspectProjectGitActivity } = require('./git-activity');
+const { inspectProjectGitActivity, runGit } = require('./git-activity');
 
 function git(directory, arguments_) {
   return execFileSync('git', ['-C', directory, ...arguments_], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -75,6 +75,26 @@ test('reports a non-Git registered path honestly as unavailable', () => fixture(
     push: { state: 'unavailable', reason: 'not_git_repository' },
     remoteRelationship: { state: 'unavailable', reason: 'not_git_repository' },
   });
+}));
+
+test('uses an exact per-command safe.directory allowance without leaking it into a projection', () => fixture((directory) => {
+  const calls = [];
+  const result = runGit(directory, ['rev-parse', '--is-inside-work-tree'], {
+    execFile(command, arguments_, options) {
+      calls.push({ command, arguments_, options });
+      return 'true\n';
+    },
+  });
+  const resolvedPath = fs.realpathSync.native(directory);
+  assert.deepEqual(result, { ok: true, output: 'true\n' });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].command, 'git');
+  assert.deepEqual(calls[0].arguments_.slice(0, 5), ['-c', `safe.directory=${resolvedPath}`, '--no-optional-locks', '-C', resolvedPath]);
+  assert.equal(calls[0].arguments_.includes('safe.directory=*'), false);
+
+  const overview = inspectProjectGitActivity({ name: 'No repository', paths: [directory] });
+  assert.equal(JSON.stringify(overview).includes(resolvedPath), false);
+  assert.equal(JSON.stringify(overview).includes('safe.directory'), false);
 }));
 
 test('reports an explicit local push reflog record but does not treat commit time as push evidence', () => fixture((directory) => {
