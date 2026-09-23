@@ -3,6 +3,9 @@ const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const { randomUUID } = require('node:crypto');
 const crypto = require('node:crypto');
+const SAFE_MODEL_ID = /^(?:gpt-\d+(?:\.\d+)?-[a-z0-9][a-z0-9.-]{0,63}|o\d(?:-[a-z0-9.-]{1,63})?)$/i;
+const SAFE_EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 
 const repositoryRoot = path.resolve(__dirname, '../..');
 const dataDirectory = path.join(repositoryRoot, 'data');
@@ -89,6 +92,28 @@ const schema = `
     recorded_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS rollout_turns_task_idx ON rollout_turns(task_id);
+  CREATE TABLE IF NOT EXISTS rollout_session_attribution (
+    project_id TEXT NOT NULL,
+    session_correlation_id TEXT NOT NULL,
+    model TEXT,
+    model_state TEXT NOT NULL CHECK (model_state IN ('available', 'unavailable', 'conflicting')),
+    effort TEXT,
+    effort_state TEXT NOT NULL CHECK (effort_state IN ('available', 'unavailable', 'conflicting')),
+    observed_at TEXT NOT NULL,
+    PRIMARY KEY (project_id, session_correlation_id)
+  );
+  CREATE INDEX IF NOT EXISTS rollout_session_attribution_project_idx ON rollout_session_attribution(project_id);
+  CREATE TABLE IF NOT EXISTS rollout_turn_attribution (
+    project_id TEXT NOT NULL,
+    turn_correlation_id TEXT NOT NULL,
+    model TEXT,
+    model_state TEXT NOT NULL CHECK (model_state IN ('available', 'unavailable', 'conflicting')),
+    effort TEXT,
+    effort_state TEXT NOT NULL CHECK (effort_state IN ('available', 'unavailable', 'conflicting')),
+    observed_at TEXT NOT NULL,
+    PRIMARY KEY (project_id, turn_correlation_id)
+  );
+  CREATE INDEX IF NOT EXISTS rollout_turn_attribution_project_idx ON rollout_turn_attribution(project_id);
   CREATE TABLE IF NOT EXISTS rollout_lifecycle_events (
     event_id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,
@@ -602,9 +627,61 @@ function getRolloutOverview(database, { registeredProjects = [] } = {}) {
     FROM rollout_source_health health
     JOIN latest_per_source latest ON latest.health_id = health.health_id
   `);
+  const readinessCoverage = database.prepare(`
+    SELECT
+      COUNT(*) AS exactResponseTurns,
+      COALESCE(SUM(CASE WHEN turns.role_key <> 'unknown' THEN 1 ELSE 0 END), 0) AS roleAvailable,
+      COALESCE(SUM(CASE WHEN attribution.model_state = 'available' THEN 1 ELSE 0 END), 0) AS modelAvailable,
+      COALESCE(SUM(CASE WHEN attribution.model_state = 'conflicting' THEN 1 ELSE 0 END), 0) AS modelConflicting,
+      COALESCE(SUM(CASE WHEN attribution.effort_state = 'available' THEN 1 ELSE 0 END), 0) AS effortAvailable,
+      COALESCE(SUM(CASE WHEN attribution.effort_state = 'conflicting' THEN 1 ELSE 0 END), 0) AS effortConflicting
+    FROM rollout_turns turns
+    LEFT JOIN rollout_turn_attribution attribution
+      ON attribution.project_id = turns.project_id AND attribution.turn_correlation_id = turns.turn_correlation_id
+    WHERE turns.project_id = ? AND turns.usage_kind = 'response_exact' AND turns.counted_in_project_totals = 1
+  `);
+  const modelLabels = database.prepare(`
+    SELECT attribution.model AS label, COUNT(*) AS turnCount
+    FROM rollout_turns turns JOIN rollout_turn_attribution attribution
+      ON attribution.project_id = turns.project_id AND attribution.turn_correlation_id = turns.turn_correlation_id
+    WHERE turns.project_id = ? AND turns.usage_kind = 'response_exact' AND turns.counted_in_project_totals = 1
+      AND attribution.model_state = 'available'
+    GROUP BY attribution.model ORDER BY turnCount DESC, attribution.model
+  `);
+  const effortLabels = database.prepare(`
+    SELECT attribution.effort AS label, COUNT(*) AS turnCount
+    FROM rollout_turns turns JOIN rollout_turn_attribution attribution
+      ON attribution.project_id = turns.project_id AND attribution.turn_correlation_id = turns.turn_correlation_id
+    WHERE turns.project_id = ? AND turns.usage_kind = 'response_exact' AND turns.counted_in_project_totals = 1
+      AND attribution.effort_state = 'available'
+    GROUP BY attribution.effort ORDER BY turnCount DESC, attribution.effort
+  `);
+  const lifecycleCompletion = database.prepare(`
+    SELECT COUNT(*) AS totalTasks,
+      COALESCE(SUM(CASE WHEN EXISTS (
+        SELECT 1 FROM rollout_lifecycle_events lifecycle
+        WHERE lifecycle.project_id = tasks.project_id
+          AND lifecycle.session_correlation_id = tasks.session_correlation_id
+          AND lifecycle.lifecycle_state IN ('stopped', 'turn_stopped', 'ended')
+      ) THEN 1 ELSE 0 END), 0) AS observedTerminalEvidence
+    FROM rollout_tasks tasks
+    WHERE tasks.project_id = ? AND EXISTS (
+      SELECT 1 FROM rollout_turns visible_turn
+      WHERE visible_turn.task_id = tasks.task_id AND visible_turn.project_id = tasks.project_id
+        AND visible_turn.usage_kind = 'response_exact' AND visible_turn.counted_in_project_totals = 1
+    )
+  `);
+
+  const coverage = (available, total, conflicting = 0) => ({
+    available, unavailable: Math.max(0, total - available - conflicting), conflicting,
+    total, coveragePercent: total ? Math.round((available / total) * 100) : null,
+    state: total === 0 ? 'not_yet_ingested' : available === total ? 'complete' : available > 0 ? 'partial' : conflicting > 0 ? 'conflicting' : 'unavailable',
+  });
 
   const records = projects.map((project) => {
     const counts = taskCounts.get(project.projectId);
+    const readiness = readinessCoverage.get(project.projectId);
+    const lifecycle = lifecycleCompletion.get(project.projectId);
     return {
       project: { name: project.projectName },
       sourceHealth: health.get(project.projectId)?.latestIngestionAt ? health.get(project.projectId) : null,
@@ -615,6 +692,12 @@ function getRolloutOverview(database, { registeredProjects = [] } = {}) {
       },
       tasks: tasks.all(project.projectId),
       roles: roles.all(project.projectId),
+      attributionReadiness: {
+        roleLabels: coverage(readiness.roleAvailable, readiness.exactResponseTurns),
+        runtimeModel: { ...coverage(readiness.modelAvailable, readiness.exactResponseTurns, readiness.modelConflicting), labels: modelLabels.all(project.projectId) },
+        reasoningEffort: { ...coverage(readiness.effortAvailable, readiness.exactResponseTurns, readiness.effortConflicting), labels: effortLabels.all(project.projectId) },
+        lifecycleCompletionEvidence: coverage(lifecycle.observedTerminalEvidence, lifecycle.totalTasks),
+      },
     };
   });
   return { hasRolloutRecords: persistedProjects.length > 0, monitorCycle: getLatestMonitorCycleStatus(database), projects: records };
@@ -630,6 +713,59 @@ function assertSafeRolloutPayload(payload) {
     }
   };
   visit(payload);
+}
+
+function validTurnAttribution(attribution) {
+  return attribution && typeof attribution.turnId === 'string' && SAFE_ID.test(attribution.turnId)
+    && ['available', 'unavailable', 'conflicting'].includes(attribution.modelState)
+    && ['available', 'unavailable', 'conflicting'].includes(attribution.effortState)
+    && (attribution.modelState === 'available' ? typeof attribution.model === 'string' && SAFE_MODEL_ID.test(attribution.model) : attribution.model == null)
+    && (attribution.effortState === 'available' ? typeof attribution.effort === 'string' && SAFE_EFFORTS.has(attribution.effort) : attribution.effort == null);
+}
+
+function mergeObservedAttribution(existing, incoming) {
+  const merge = (value, state, currentValue, currentState) => {
+    if (!currentState || currentState === 'unavailable') return { value, state };
+    if (currentState === 'conflicting' || state === 'conflicting') return { value: null, state: 'conflicting' };
+    if (state === 'unavailable' || currentValue === value) return { value: currentValue, state: currentState };
+    return { value: null, state: 'conflicting' };
+  };
+  const model = merge(incoming.model, incoming.modelState, existing?.model, existing?.model_state);
+  const effort = merge(incoming.effort, incoming.effortState, existing?.effort, existing?.effort_state);
+  return { model: model.value, modelState: model.state, effort: effort.value, effortState: effort.state };
+}
+
+function persistTurnAttributions(database, { project, turnAttributions = [], now = new Date().toISOString() } = {}) {
+  const findTurn = database.prepare('SELECT 1 FROM rollout_turns WHERE project_id = ? AND turn_correlation_id = ?');
+  const existing = database.prepare('SELECT model, model_state, effort, effort_state FROM rollout_turn_attribution WHERE project_id = ? AND turn_correlation_id = ?');
+  const upsert = database.prepare(`INSERT INTO rollout_turn_attribution (project_id, turn_correlation_id, model, model_state, effort, effort_state, observed_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(project_id, turn_correlation_id) DO UPDATE SET model = excluded.model, model_state = excluded.model_state,
+      effort = excluded.effort, effort_state = excluded.effort_state, observed_at = excluded.observed_at`);
+  let persisted = 0; let duplicatesIgnored = 0;
+  for (const attribution of turnAttributions) {
+    if (!validTurnAttribution(attribution)) throw new Error('Invalid turn attribution');
+    const turnCorrelationId = correlationId(`codex_rollout::turn::${attribution.turnId}`);
+    if (!findTurn.get(project.id, turnCorrelationId)) { duplicatesIgnored += 1; continue; }
+    const current = existing.get(project.id, turnCorrelationId);
+    const merged = mergeObservedAttribution(current, attribution);
+    if (current && current.model === merged.model && current.model_state === merged.modelState
+      && current.effort === merged.effort && current.effort_state === merged.effortState) { duplicatesIgnored += 1; continue; }
+    upsert.run(project.id, turnCorrelationId, merged.model, merged.modelState, merged.effort, merged.effortState, now);
+    persisted += 1;
+  }
+  return { persisted, duplicatesIgnored };
+}
+
+function persistRolloutAttributionBackfill(database, { project, turnAttributions, now = new Date().toISOString() } = {}) {
+  if (!project?.id || !project?.name || !Array.isArray(turnAttributions)) throw new Error('Project and turn attributions are required');
+  assertSafeRolloutPayload({ turnAttributions });
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    const result = persistTurnAttributions(database, { project, turnAttributions, now });
+    database.exec('COMMIT');
+    return result;
+  } catch (error) { database.exec('ROLLBACK'); throw error; }
 }
 
 function persistRolloutBatch(database, { project, sourceFileId, adapterResult, now = new Date().toISOString(), failAfterTurns } = {}) {
@@ -671,6 +807,7 @@ function persistRolloutBatch(database, { project, sourceFileId, adapterResult, n
       if (updated.changes === 0) throw new Error('Completed task cannot accept a new turn');
       persisted += 1;
     }
+    persistTurnAttributions(database, { project, turnAttributions: adapterResult.turnAttributions || [], now });
     database.prepare(`
       INSERT INTO rollout_source_health (
         project_id, project_name, source_file_id, observed_at, files_scanned, bytes_read, records_scanned,
@@ -736,4 +873,4 @@ function persistLifecycleBatch(database, { adapterResult, now = new Date().toISO
   } catch (error) { database.exec('ROLLBACK'); throw error; }
 }
 
-module.exports = { assertSafeMonitorCycleStatus, assertSafeRolloutPayload, closeDatabase, createAgentProfile, defaultDatabasePath, getAgentPerformance, getLatestMonitorCycleStatus, getLatestRolloutHealth, getLifecycleCheckpoint, getRolloutCheckpoint, getRolloutOverview, getSummary, listAgentProfiles, listEvents, listRolloutTasks, listRolloutTurns, openDatabase, persistLifecycleBatch, persistMonitorCycleStatus, persistRolloutBatch, recordEvent };
+module.exports = { assertSafeMonitorCycleStatus, assertSafeRolloutPayload, closeDatabase, createAgentProfile, defaultDatabasePath, getAgentPerformance, getLatestMonitorCycleStatus, getLifecycleCheckpoint, getLatestRolloutHealth, getRolloutCheckpoint, getRolloutOverview, getSummary, listAgentProfiles, listEvents, listRolloutTasks, listRolloutTurns, mergeObservedAttribution, openDatabase, persistLifecycleBatch, persistMonitorCycleStatus, persistRolloutAttributionBackfill, persistRolloutBatch, persistTurnAttributions, recordEvent, validTurnAttribution };

@@ -33,6 +33,34 @@ test('an allowlisted real-source-shaped record becomes a normalized turn', () =>
   assert.equal(result.turns[0].agent.key, 'frontend');
 }));
 
+test('captures only validated turn-correlated model and effort metadata', () => withFixture([
+  { type: 'turn_context', timestamp: '2026-09-11T16:00:00.000Z', ordinal: 0, payload: { turn_id: 'turn_real', model: 'gpt-6-astra', effort: 'high', cwd: 'C:\\private' } },
+  sourceRecord(),
+], (file) => {
+  const result = adaptRolloutFile(file);
+  assert.deepEqual(result.turnAttributions, [{ turnId: 'turn_real', model: 'gpt-6-astra', modelState: 'available', effort: 'high', effortState: 'available' }]);
+  assert.doesNotMatch(JSON.stringify(result.turnAttributions), /private|cwd/);
+}));
+
+test('rejects arbitrary model and effort values as unavailable rather than persisting them', () => withFixture([
+  { type: 'turn_context', timestamp: '2026-09-11T16:00:00.000Z', ordinal: 0, payload: { turn_id: 'turn_real', model: 'untrusted model label', effort: 'extreme' } },
+  sourceRecord(),
+], (file) => {
+  const result = adaptRolloutFile(file);
+  assert.deepEqual(result.turnAttributions, [{ turnId: 'turn_real', model: null, modelState: 'unavailable', effort: null, effortState: 'unavailable' }]);
+}));
+
+test('keeps explicit model and effort separate for different turns', () => withFixture([
+  { type: 'turn_context', timestamp: '2026-09-11T16:00:00.000Z', ordinal: 0, payload: { turn_id: 'turn_real', model: 'gpt-5.6-terra', effort: 'medium' } },
+  { type: 'turn_context', timestamp: '2026-09-11T16:00:00.000Z', ordinal: 1, payload: { turn_id: 'turn_other', model: 'gpt-6-astra', effort: 'high' } },
+  sourceRecord(), sourceRecord({ payload: { ...sourceRecord().payload, turn_id: 'turn_other', response_id: 'response_other' } }),
+], (file) => {
+  const result = adaptRolloutFile(file);
+  assert.deepEqual(result.turnAttributions.map(({ turnId, model, effort }) => ({ turnId, model, effort })), [
+    { turnId: 'turn_real', model: 'gpt-5.6-terra', effort: 'medium' }, { turnId: 'turn_other', model: 'gpt-6-astra', effort: 'high' },
+  ]);
+}));
+
 test('a record without exact per-response usage is reported as unavailable', () => withFixture([
   sourceRecord({ payload: { thread_id: 'task_real', session_id: 'session_real', turn_id: 'turn_real', response_id: 'response_real' } }),
 ], (file) => {

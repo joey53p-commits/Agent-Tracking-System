@@ -5,6 +5,9 @@ const { createRolloutNormalizer } = require('../rollout-normalizer');
 const SOURCE = 'codex_rollout';
 const DEFAULT_MAX_BYTES = 512 * 1024;
 const DEFAULT_METADATA_MAX_BYTES = 128 * 1024;
+const MODEL_ID = /^(?:gpt-\d+(?:\.\d+)?-[a-z0-9][a-z0-9.-]{0,63}|o\d(?:-[a-z0-9.-]{1,63})?)$/i;
+const EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 
 function parseJsonObjects(input, baseOffset = 0) {
   // Checkpoints are file byte offsets.  Parse the UTF-8 bytes directly so a
@@ -82,6 +85,47 @@ function usableUsage(usage) {
   if (![inputTokens, outputTokens, totalTokens].every((value) => Number.isInteger(value) && value >= 0)) return null;
   if (totalTokens !== inputTokens + outputTokens) return null;
   return { inputTokens, outputTokens, totalTokens };
+}
+
+// These values come only from explicit session metadata. They are deliberately
+// narrow so arbitrary source strings cannot become a stored model label.
+function safeModel(value) {
+  return typeof value === 'string' && MODEL_ID.test(value) ? value.toLowerCase() : null;
+}
+
+function safeEffort(value) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : null;
+  return normalized && EFFORTS.has(normalized) ? normalized : null;
+}
+
+function turnContextAttribution(value) {
+  if (value?.type !== 'turn_context' || !value.payload || typeof value.payload !== 'object') return null;
+  const turnId = typeof value.payload.turn_id === 'string' && SAFE_ID.test(value.payload.turn_id) ? value.payload.turn_id : null;
+  if (!turnId) return null;
+  return { turnId, model: safeModel(value.payload.model), effort: safeEffort(value.payload.effort) };
+}
+
+function turnAttributions(records) {
+  const values = new Map();
+  for (const { value } of records) {
+    const attribution = turnContextAttribution(value);
+    if (!attribution) continue;
+    const current = values.get(attribution.turnId) || { model: new Set(), effort: new Set() };
+    if (attribution.model) current.model.add(attribution.model);
+    if (attribution.effort) current.effort.add(attribution.effort);
+    values.set(attribution.turnId, current);
+  }
+  return [...values].map(([turnId, current]) => {
+    const modelValues = current ? [...current.model] : [];
+    const effortValues = current ? [...current.effort] : [];
+    return {
+      turnId,
+      model: modelValues.length === 1 ? modelValues[0] : null,
+      modelState: modelValues.length === 1 ? 'available' : modelValues.length > 1 ? 'conflicting' : 'unavailable',
+      effort: effortValues.length === 1 ? effortValues[0] : null,
+      effortState: effortValues.length === 1 ? 'available' : effortValues.length > 1 ? 'conflicting' : 'unavailable',
+    };
+  });
 }
 
 function candidateForRecord(record, agent) {
@@ -234,9 +278,11 @@ function adaptRolloutFile(filePath, options = {}) {
   health.freshness = freshness(finalStat.mtime, options.now);
   health.pendingBytes = Math.max(0, finalStat.size - lastSafeOffset);
   health.readState = health.pendingBytes === 0 ? 'caught_up' : 'partial';
+  const explicitTurnAttributions = turnAttributions(parsed.records);
   return {
     turns: normalizer.snapshot().turns,
     tasks: normalizer.snapshot().tasks,
+    turnAttributions: explicitTurnAttributions,
     health,
     nextCheckpoint: unfinishedEnvelope
       ? { offset: startOffset, fileSize: finalStat.size, openEnvelope: { startOffset: parsed.openStartOffset, ...parsed.openState } }
@@ -244,4 +290,4 @@ function adaptRolloutFile(filePath, options = {}) {
   };
 }
 
-module.exports = { DEFAULT_METADATA_MAX_BYTES, SOURCE, adaptRolloutFile, candidateForRecord, findObjectEnd, parseJsonObjects, resumableEnvelope, rolloutMetadata, rolloutMetadataDiscovery, sourceFileId, usableUsage };
+module.exports = { DEFAULT_METADATA_MAX_BYTES, EFFORTS, MODEL_ID, SOURCE, adaptRolloutFile, candidateForRecord, findObjectEnd, parseJsonObjects, resumableEnvelope, rolloutMetadata, rolloutMetadataDiscovery, safeEffort, safeModel, sourceFileId, turnAttributions, turnContextAttribution, usableUsage };

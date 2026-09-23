@@ -113,6 +113,29 @@ totals. It is never calculated from session or thread totals. A task remains
 source fact: the live source did not provide a child-agent label; the dashboard
 does not infer one from identifiers or task content.
 
+### Attribution readiness
+
+Each project also receives an aggregate attribution-readiness projection for
+eligible exact-response, project-agent work. Role-label coverage is calculated
+from the safe registry/lifecycle label on each persisted response. Runtime model
+and reasoning-effort coverage are calculated only when a matching
+`turn_context` record explicitly supplies a constrained model ID and one of the
+allowed effort labels (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`,
+`max`, or `ultra`). They are correlated through a one-way turn hash; profile
+defaults, filenames, task content, and working paths are never used as a
+substitute. Missing or conflicting metadata is reported as unavailable.
+
+Terminal lifecycle evidence counts only an observed `stopped`, `turn_stopped`,
+or `ended` event for the matching session. It is a linkage-coverage signal, not
+task acceptance or task-completion proof. The projection exposes only aggregate
+counts, percentages, readiness state, and validated model/effort labels with
+response counts.
+
+`npm run backfill:attribution` is an explicit bounded, idempotent replay for
+already-persisted response rows. It reads at most 512 KiB per attributable
+rollout source by default and writes only turn-attribution rows; it never
+updates response usage, monitor source health, or monitor checkpoints.
+
 ## Stage 6 automatic local rollout monitoring
 
 `npm run monitor:continuous` starts a local process that discovers

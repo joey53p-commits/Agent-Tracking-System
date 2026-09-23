@@ -41,6 +41,13 @@ any partial or stale source remains visible instead of being masked by a later
 healthy source. Freshness describes source age at the recorded ingestion
 snapshot; it does not claim that collection is currently running.
 
+Each project card includes **Attribution readiness**. It shows coverage for
+role labels, explicit runtime model, explicit reasoning effort, and terminal
+lifecycle evidence before the data is used to judge agent effectiveness. A
+missing field is shown as unavailable, not as zero or a registry default.
+Terminal lifecycle evidence only means a matching local stop/end event was
+observed; it never means that the task was accepted or completed.
+
 The **Work** views contain the reviewed task-event workflow: recording work,
 active or interrupted tasks, task history, filters, and workstream progress.
 Project, workstream, and status filters update the task list without changing

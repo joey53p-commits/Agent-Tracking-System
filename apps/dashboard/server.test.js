@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const test = require('node:test');
-const { closeDatabase, openDatabase, persistMonitorCycleStatus, persistRolloutBatch, recordEvent } = require('../storage/database');
+const { closeDatabase, getRolloutCheckpoint, openDatabase, persistMonitorCycleStatus, persistRolloutAttributionBackfill, persistRolloutBatch, recordEvent } = require('../storage/database');
 const { createDashboardServer, startDashboard } = require('./server');
 
 const testDatabasePath = path.join(__dirname, '../../data/dashboard.test.sqlite');
@@ -60,6 +60,7 @@ function persistRolloutFixture(databasePath, {
   now = '2026-09-15T12:00:00.000Z',
   agent = { key: 'unknown', label: 'Unknown role', population: 'project_agent', countedInProjectTotals: true },
   additionalTurns = [],
+  turnAttributions = [],
 } = {}) {
   const database = openDatabase(databasePath);
   try {
@@ -73,6 +74,7 @@ function persistRolloutFixture(databasePath, {
           usage: { inputTokens: 11, outputTokens: 4, totalTokens: 15 },
           agent,
         }, ...additionalTurns] : [],
+        turnAttributions,
         health: { filesScanned: 1, bytesRead: 200, recordsScanned: 2, recordsAccepted: includeTurn ? 1 + additionalTurns.length : 0, recordsSkipped: includeTurn ? Math.max(0, 1 - additionalTurns.length) : 2, malformedRecords: 0, recordsWithoutUsableUsage: 0, overlongRecords: 0, overlongPending: readState === 'partial', schemaObservations: ['token_usage_record:response_usage_v1'], freshness: { ageMs: 0, state: freshnessState }, pendingBytes, readState },
         nextCheckpoint: { offset: 200, fileSize: 200 },
       },
@@ -247,6 +249,43 @@ test('rollout overview returns only persisted, allowlisted response usage data',
   removeDatabase(databasePath);
 });
 
+test('rollout overview shows attribution readiness from explicit correlated evidence only', async () => {
+  const databasePath = path.join(__dirname, `../../data/rollout-attribution-${randomUUID()}.test.sqlite`);
+  removeDatabase(databasePath);
+  persistRolloutFixture(databasePath, {
+    agent: { key: 'frontend', label: 'Frontend', population: 'project_agent', countedInProjectTotals: true },
+    turnAttributions: [{ turnId: 'turn_1', model: 'gpt-6-astra', modelState: 'available', effort: 'high', effortState: 'available' }],
+  });
+  const server = createDashboardServer({ databasePath });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const data = JSON.parse((await request(server, { pathname: '/api/rollout-overview' })).body);
+  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  const readiness = data.projects[0].attributionReadiness;
+  assert.deepEqual(readiness.roleLabels, { available: 1, unavailable: 0, conflicting: 0, total: 1, coveragePercent: 100, state: 'complete' });
+  assert.deepEqual(readiness.runtimeModel, { available: 1, unavailable: 0, conflicting: 0, total: 1, coveragePercent: 100, state: 'complete', labels: [{ label: 'gpt-6-astra', turnCount: 1 }] });
+  assert.deepEqual(readiness.reasoningEffort, { available: 1, unavailable: 0, conflicting: 0, total: 1, coveragePercent: 100, state: 'complete', labels: [{ label: 'high', turnCount: 1 }] });
+  assert.deepEqual(readiness.lifecycleCompletionEvidence, { available: 0, unavailable: 1, conflicting: 0, total: 1, coveragePercent: 0, state: 'unavailable' });
+  assert.equal(privateFieldPresent(data), false);
+  removeDatabase(databasePath);
+});
+
+test('attribution replay is idempotent, preserves usage/checkpoints, and retains conflicts', () => {
+  const databasePath = path.join(__dirname, `../../data/rollout-attribution-replay-${randomUUID()}.test.sqlite`);
+  removeDatabase(databasePath); persistRolloutFixture(databasePath);
+  const database = openDatabase(databasePath);
+  try {
+    const before = getRolloutCheckpoint(database, 'tracker', 'opaque-source-hash');
+    const first = persistRolloutAttributionBackfill(database, { project: { id: 'tracker', name: 'Agent Tracking System' }, turnAttributions: [{ turnId: 'turn_1', model: 'gpt-5.6-terra', modelState: 'available', effort: 'medium', effortState: 'available' }] });
+    const second = persistRolloutAttributionBackfill(database, { project: { id: 'tracker', name: 'Agent Tracking System' }, turnAttributions: [{ turnId: 'turn_1', model: 'gpt-6-astra', modelState: 'available', effort: 'high', effortState: 'available' }] });
+    const replay = persistRolloutAttributionBackfill(database, { project: { id: 'tracker', name: 'Agent Tracking System' }, turnAttributions: [{ turnId: 'turn_1', model: 'gpt-6-astra', modelState: 'available', effort: 'high', effortState: 'available' }] });
+    const stored = database.prepare('SELECT model, model_state, effort, effort_state FROM rollout_turn_attribution').get();
+    const task = database.prepare('SELECT total_tokens FROM rollout_tasks').get();
+    assert.equal(first.persisted, 1); assert.equal(second.persisted, 1); assert.equal(replay.persisted, 0);
+    assert.equal(stored.model, null); assert.equal(stored.model_state, 'conflicting'); assert.equal(stored.effort, null); assert.equal(stored.effort_state, 'conflicting');
+    assert.equal(task.total_tokens, 15); assert.deepEqual(getRolloutCheckpoint(database, 'tracker', 'opaque-source-hash'), before);
+  } finally { closeDatabase(database); removeDatabase(databasePath); }
+});
+
 test('rollout overview lists registered projects before their first ingestion and displays latest source health safely', async () => {
   const emptyPath = path.join(__dirname, `../../data/rollout-empty-${randomUUID()}.test.sqlite`);
   removeDatabase(emptyPath);
@@ -254,7 +293,12 @@ test('rollout overview lists registered projects before their first ingestion an
   await new Promise((resolve) => emptyServer.listen(0, '127.0.0.1', resolve));
   const empty = JSON.parse((await request(emptyServer, { pathname: '/api/rollout-overview' })).body);
   await new Promise((resolve, reject) => emptyServer.close((error) => error ? reject(error) : resolve()));
-  assert.deepEqual(empty, { hasRolloutRecords: false, monitorCycle: null, projects: [{ project: { name: 'Agent Tracking System' }, sourceHealth: null, totals: { activeTasks: 0, completedTasks: 0, exactResponseUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } }, tasks: [], roles: [] }] });
+  assert.deepEqual(empty, { hasRolloutRecords: false, monitorCycle: null, projects: [{ project: { name: 'Agent Tracking System' }, sourceHealth: null, totals: { activeTasks: 0, completedTasks: 0, exactResponseUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } }, tasks: [], roles: [], attributionReadiness: {
+    roleLabels: { available: 0, unavailable: 0, conflicting: 0, total: 0, coveragePercent: null, state: 'not_yet_ingested' },
+    runtimeModel: { available: 0, unavailable: 0, conflicting: 0, total: 0, coveragePercent: null, state: 'not_yet_ingested', labels: [] },
+    reasoningEffort: { available: 0, unavailable: 0, conflicting: 0, total: 0, coveragePercent: null, state: 'not_yet_ingested', labels: [] },
+    lifecycleCompletionEvidence: { available: 0, unavailable: 0, conflicting: 0, total: 0, coveragePercent: null, state: 'not_yet_ingested' },
+  } }] });
   removeDatabase(emptyPath);
 
   const healthPath = path.join(__dirname, `../../data/rollout-health-${randomUUID()}.test.sqlite`);

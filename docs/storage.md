@@ -25,6 +25,15 @@ exposes a read-only allowlisted aggregate at `GET /api/rollout-overview` for
 the local Overview. It does not expose durable raw-row shapes or
 source/session/turn/response identifiers.
 
+## Attribution-readiness storage
+
+`rollout_turn_attribution` stores only a project ID, one-way turn
+correlation hash, validated runtime model ID, allowed reasoning-effort label,
+their availability/conflict state, and observation timestamp. It has no raw
+turn ID, metadata payload, source path, prompt, or source content. Overview
+queries join this table only to compute project-level response coverage and
+safe label counts.
+
 ## Stage 6 monitor writes
 
 The monitor does not introduce another storage path. Every eligible source is

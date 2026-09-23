@@ -320,4 +320,4 @@ if (require.main === module) {
   main().then((result) => process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)).catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
 }
 
-module.exports = { DEFAULT_CATCH_UP_BYTES_PER_CYCLE, DEFAULT_POLL_INTERVAL_MS, LOCK_STALE_MS, MIN_POLL_INTERVAL_MS, acquireDatabaseCycleLock, checkpointProgressed, consumedCatchUpBytes, createRolloutMonitor, discoverRolloutSources, fairByteAllocations, healthState, installShutdownHandlers, isRolloutFile, lockPathForDatabase, main, parseArguments, runMonitorCycle, walkRolloutFiles };
+module.exports = { DEFAULT_CATCH_UP_BYTES_PER_CYCLE, DEFAULT_POLL_INTERVAL_MS, LOCK_STALE_MS, MIN_POLL_INTERVAL_MS, acquireDatabaseCycleLock, checkpointProgressed, consumedCatchUpBytes, createRolloutMonitor, defaultProjectConfigPath, defaultRolloutDirectory, discoverRolloutSources, fairByteAllocations, healthState, installShutdownHandlers, isRolloutFile, lockPathForDatabase, main, parseArguments, runMonitorCycle, walkRolloutFiles };

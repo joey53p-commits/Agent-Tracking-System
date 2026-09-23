@@ -6,6 +6,12 @@ Collect task identifiers, safe titles, project/workstream, timestamps, status, a
 
 For approved local rollout ingestion, collect only source-qualified task/session/turn/response identifiers, registered project ID/name, safe role classification, active/completed state, exact response-level input/output/total token counts, an opaque source-file hash, checkpoint offsets, and source-health counters/freshness. Agent paths are transient classification input only and are not retained.
 
+When an explicit rollout `turn_context` record supplies them, the tracker may
+retain a constrained runtime model ID and an allowed reasoning-effort label
+against a one-way turn correlation hash. Missing, malformed, or conflicting
+values remain unavailable. Profile defaults and task content are never used to
+fill those fields.
+
 ## Excluded by default
 
 Never collect access tokens, API keys, passwords, cookies, environment files, personal data, raw prompts, full tool output, source code, screenshots, or transcripts.
@@ -28,6 +34,11 @@ does not expose raw rollout records, source/session/turn/response identifiers,
 source hashes, checkpoint details, schema observations, project paths, prompts,
 messages, reasoning, tools, commands, code, diffs, transcripts, or cumulative
 session/thread totals.
+
+Attribution readiness adds only aggregate coverage counts/states and validated
+model/effort label counts. It never exposes session correlations or metadata
+records, and terminal lifecycle evidence is explicitly not presented as task
+acceptance or completion.
 
 The Stage 6 monitor scans only the local Codex sessions directory supplied to
 the process. File paths and session working directories are transient inputs to
