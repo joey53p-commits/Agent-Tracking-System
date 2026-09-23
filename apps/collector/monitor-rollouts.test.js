@@ -4,7 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const test = require('node:test');
-const { DEFAULT_CATCH_UP_BYTES_PER_CYCLE, acquireDatabaseCycleLock, checkpointProgressed, createRolloutMonitor, discoverRolloutSources, fairByteAllocations, installShutdownHandlers, lockPathForDatabase, runMonitorCycle } = require('./monitor-rollouts');
+const { DEFAULT_CATCH_UP_BYTES_PER_CYCLE, acquireDatabaseCycleLock, checkpointProgressed, createRolloutMonitor, discoverRolloutSources, fairByteAllocations, installShutdownHandlers, lockPathForDatabase, main, parseArguments, runMonitorCycle } = require('./monitor-rollouts');
 const { closeDatabase, defaultDatabasePath, getLatestMonitorCycleStatus, listRolloutTurns, openDatabase } = require('../storage/database');
 
 const projects = [{ id: 'tracker', name: 'Agent Tracking System', paths: ['C:\\project\\tracker'] }];
@@ -366,3 +366,28 @@ test('shutdown handlers are installed before startup and await an active initial
   assert.equal(fakeProcess.exitCode, 0);
   assert.equal(monitor.running, false);
 }));
+
+test('monitor command requires an explicit once or continuous mode', () => {
+  assert.throws(() => parseArguments([]), /explicit monitor mode/);
+  assert.throws(() => parseArguments(['--once', '--continuous']), /exactly one monitor mode/);
+  assert.equal(parseArguments(['--once']).mode, 'once');
+  assert.equal(parseArguments(['--continuous']).mode, 'continuous');
+});
+
+test('one-time monitor mode runs one cycle without scheduling continuous polling', async () => {
+  let started = 0;
+  let cycles = 0;
+  let handlers = 0;
+  const result = await main(['--once'], {
+    loadObserver: () => ({ readProjectConfig: () => projects, registeredProjectForPath: resolveProject }),
+    createMonitor: () => ({
+      runCycle: async () => { cycles += 1; return { completedAt: '2026-09-23T12:00:00.000Z' }; },
+      start: async () => { started += 1; },
+    }),
+    installHandlers: () => { handlers += 1; },
+  });
+  assert.equal(cycles, 1);
+  assert.equal(started, 0);
+  assert.equal(handlers, 0);
+  assert.deepEqual(result, { completedAt: '2026-09-23T12:00:00.000Z' });
+});

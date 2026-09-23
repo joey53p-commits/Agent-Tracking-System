@@ -36,3 +36,8 @@ responses or stored as source health. Unregistered sources are ignored. Cycle
 reports contain counts and health states only, not source paths or raw errors.
 The monitor does not contact a remote collector or alter user-level Codex
 configuration.
+
+Dashboard startup has no monitor dependency and does not begin collection. A
+one-time local cycle requires `npm run monitor:once`; continuous polling
+requires `npm run monitor:continuous`. The unqualified `npm run monitor`
+command fails closed rather than choosing a collection mode.

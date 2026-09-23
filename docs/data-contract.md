@@ -115,11 +115,13 @@ does not infer one from identifiers or task content.
 
 ## Stage 6 automatic local rollout monitoring
 
-`npm run monitor` starts a local process that discovers `rollout-*.jsonl`
-files below the configured Codex sessions directory, attributes each source by
-its transient session working directory, and sends only registered sources
-through the existing Stage 4 ingestion function. `npm run monitor:once` runs
-the same discovery and ingestion logic once for testing or an explicit refresh.
+`npm run monitor:continuous` starts a local process that discovers
+`rollout-*.jsonl` files below the configured Codex sessions directory,
+attributes each source by its transient session working directory, and sends
+only registered sources through the existing Stage 4 ingestion function.
+`npm run monitor:once` runs the same discovery and ingestion logic once for
+testing or an explicit refresh. `npm run monitor` fails closed and requires one
+of those modes; it cannot silently start continuous polling.
 
 The default poll interval is 30 seconds and can be changed with
 `--interval-ms`; values below one second are clamped to one second. An atomic

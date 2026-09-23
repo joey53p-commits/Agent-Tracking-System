@@ -285,27 +285,35 @@ function installShutdownHandlers(monitor, processRef = process) {
 }
 
 function parseArguments(argv) {
-  const options = { once: false, intervalMs: DEFAULT_POLL_INTERVAL_MS, rolloutDirectory: defaultRolloutDirectory, projectConfigPath: defaultProjectConfigPath };
+  const options = { mode: null, intervalMs: DEFAULT_POLL_INTERVAL_MS, rolloutDirectory: defaultRolloutDirectory, projectConfigPath: defaultProjectConfigPath };
   for (let index = 0; index < argv.length; index += 1) {
-    if (argv[index] === '--once') options.once = true;
+    if (argv[index] === '--once' || argv[index] === '--continuous') {
+      const mode = argv[index] === '--once' ? 'once' : 'continuous';
+      if (options.mode && options.mode !== mode) throw new Error('Choose exactly one monitor mode: --once or --continuous.');
+      options.mode = mode;
+    }
     if (argv[index] === '--interval-ms') options.intervalMs = Number(argv[++index]);
     if (argv[index] === '--rollout-dir') options.rolloutDirectory = argv[++index];
     if (argv[index] === '--project-config') options.projectConfigPath = argv[++index];
     if (argv[index] === '--database') options.databasePath = argv[++index];
   }
   if (!Number.isFinite(options.intervalMs) || options.intervalMs <= 0) throw new Error('The polling interval must be a positive number of milliseconds');
+  if (!options.mode) throw new Error('Choose an explicit monitor mode: --once or --continuous.');
   return options;
 }
 
-async function main(argv = process.argv.slice(2)) {
+async function main(argv = process.argv.slice(2), {
+  loadObserver = () => require('C:\\Users\\jwlin\\.codex\\agent-ops\\record-hook.js'),
+  createMonitor = createRolloutMonitor,
+  installHandlers = installShutdownHandlers,
+} = {}) {
   const parsed = parseArguments(argv);
-  const observer = require('C:\\Users\\jwlin\\.codex\\agent-ops\\record-hook.js');
+  const observer = loadObserver();
   const options = { ...parsed, projects: observer.readProjectConfig(parsed.projectConfigPath), registeredProjectForPath: observer.registeredProjectForPath };
-  const monitor = createRolloutMonitor(options);
-  installShutdownHandlers(monitor);
-  const initial = await monitor.start();
-  if (parsed.once) { await monitor.stop(); return initial; }
-  return initial;
+  const monitor = createMonitor(options);
+  if (parsed.mode === 'once') return monitor.runCycle();
+  installHandlers(monitor);
+  return monitor.start();
 }
 
 if (require.main === module) {

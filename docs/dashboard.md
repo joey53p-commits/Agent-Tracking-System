@@ -8,6 +8,13 @@ npm run dashboard
 
 Open `http://127.0.0.1:4173` in a browser on the same computer. The server binds only to `127.0.0.1` and exposes a small local API for the dashboard interface; it does not serve the SQLite database file or bind to the network.
 
+Starting the dashboard never starts, schedules, or retains a rollout monitor.
+It only reads persisted local data unless you deliberately use a separate
+manual task-recording form. Collection has separate explicit commands:
+`npm run monitor:once` for one bounded cycle and `npm run monitor:continuous`
+for continuous polling. `npm run monitor` stops with an instruction instead of
+choosing a collection mode for you.
+
 The rollout Overview re-reads `GET /api/rollout-overview` every 15 seconds.
 That browser refresh only reads: it never discovers a rollout, starts
 ingestion, or sends a write request. The displayed time is the latest

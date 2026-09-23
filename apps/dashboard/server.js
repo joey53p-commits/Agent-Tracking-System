@@ -146,10 +146,13 @@ function createDashboardServer({ databasePath = defaultDatabasePath, registeredP
   });
 }
 
-function startDashboard({ port = Number(process.env.PORT || 4173), databasePath } = {}) {
-  const server = createDashboardServer({ databasePath });
+function startDashboard({ port = Number(process.env.PORT || 4173), databasePath, registeredProjects } = {}) {
+  // Serving the dashboard is intentionally separate from collection. This
+  // function has no monitor dependency and must never schedule ingestion.
+  const server = createDashboardServer({ databasePath, registeredProjects });
   server.listen(port, '127.0.0.1', () => {
-    process.stdout.write(`Agent Tracking dashboard is available at http://127.0.0.1:${port}\n`);
+    const address = server.address();
+    process.stdout.write(`Agent Tracking dashboard is available at http://127.0.0.1:${address.port}\n`);
   });
   return server;
 }

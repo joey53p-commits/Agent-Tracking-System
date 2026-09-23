@@ -5,7 +5,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const test = require('node:test');
 const { closeDatabase, openDatabase, persistMonitorCycleStatus, persistRolloutBatch, recordEvent } = require('../storage/database');
-const { createDashboardServer } = require('./server');
+const { createDashboardServer, startDashboard } = require('./server');
 
 const testDatabasePath = path.join(__dirname, '../../data/dashboard.test.sqlite');
 
@@ -105,6 +105,33 @@ test('serves a local dashboard summary without exposing a database file', async 
   fs.rmSync(testDatabasePath, { force: true });
   fs.rmSync(`${testDatabasePath}-wal`, { force: true });
   fs.rmSync(`${testDatabasePath}-shm`, { force: true });
+});
+
+test('dashboard startup only serves the local API and never schedules or starts a monitor', async () => {
+  const databasePath = path.join(__dirname, `../../data/dashboard-read-only-${randomUUID()}.test.sqlite`);
+  const lockPath = `${path.resolve(databasePath)}.monitor.lock`;
+  removeDatabase(databasePath);
+  fs.rmSync(lockPath, { force: true });
+  const originalSetInterval = global.setInterval;
+  let scheduledIntervals = 0;
+  global.setInterval = (...args) => { scheduledIntervals += 1; return originalSetInterval(...args); };
+  let server;
+  try {
+    server = startDashboard({ port: 0, databasePath, registeredProjects: [] });
+    await new Promise((resolve) => server.once('listening', resolve));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    assert.equal(scheduledIntervals, 0);
+    assert.equal(fs.existsSync(databasePath), false);
+    assert.equal(fs.existsSync(lockPath), false);
+    const overview = await request(server, { pathname: '/api/rollout-overview' });
+    assert.equal(overview.statusCode, 200);
+    assert.equal(fs.existsSync(lockPath), false);
+  } finally {
+    global.setInterval = originalSetInterval;
+    if (server?.listening) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    removeDatabase(databasePath);
+    fs.rmSync(lockPath, { force: true });
+  }
 });
 
 test('records safe dashboard submissions and rejects private task content', async () => {

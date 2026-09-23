@@ -16,8 +16,8 @@ can evolve and be released independently.
 5. Use [model routing](docs/model-routing.md) to select the task's model and effort.
 6. Use `node apps/collector/collect.js --input examples/rise-task-event.json --dry-run` to validate a safe event.
 7. Store normalized events in the local SQLite database under `data/` (ignored by Git).
-8. Start the local dashboard with `npm run dashboard`, then open `http://127.0.0.1:4173`.
-9. Start automatic local rollout ingestion with `npm run monitor`, or run one safe discovery/ingestion cycle with `npm run monitor:once`.
+8. Start the local dashboard with `npm run dashboard`, then open `http://127.0.0.1:4173`. This only serves already-stored local data.
+9. Choose collection deliberately: run one safe discovery/ingestion cycle with `npm run monitor:once`, or begin continuous local polling only with `npm run monitor:continuous`.
 
 ## Scope
 
@@ -29,8 +29,10 @@ The Stage 6 rollout monitor remains an explicitly started local process. It
 polls local Codex rollout storage every 30 seconds by default, attributes files
 through the registered-project configuration, and reuses the existing durable
 ingestion path. It does not install hooks, scheduled tasks, services, or remote
-collectors. Use `npm run monitor -- --interval-ms 10000` to choose another
-interval (minimum 1 second).
+collectors. `npm run monitor` intentionally refuses to run without a mode, so a
+mistyped collection command cannot silently begin continuous polling. Use
+`npm run monitor:continuous -- --interval-ms 10000` to choose another interval
+(minimum 1 second).
 
 ## Repository layout
 

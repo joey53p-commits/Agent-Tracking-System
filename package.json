@@ -8,6 +8,7 @@
     "dashboard": "node apps/dashboard/server.js",
     "monitor": "node apps/collector/monitor-rollouts.js",
     "monitor:once": "node apps/collector/monitor-rollouts.js --once",
+    "monitor:continuous": "node apps/collector/monitor-rollouts.js --continuous",
     "test": "node --test"
   },
   "engines": { "node": ">=20" }
