@@ -1,11 +1,12 @@
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
-const { closeDatabase, createAgentProfile, defaultDatabasePath, getAgentPerformance, getSummary, listAgentProfiles, listEvents, openDatabase, recordEvent } = require('../storage/database');
+const { closeDatabase, createAgentProfile, defaultDatabasePath, getAgentPerformance, getRolloutOverview, getSummary, listAgentProfiles, listEvents, openDatabase, recordEvent } = require('../storage/database');
 const { getFilterCatalog } = require('./catalog');
 const { normalizeEvent } = require('../collector/collect');
 
 const publicDirectory = path.join(__dirname, 'public');
+const defaultProjectConfigPath = 'C:\\Users\\jwlin\\.codex\\agent-ops\\projects.json';
 const staticFiles = {
   '/': { file: 'index.html', contentType: 'text/html; charset=utf-8' },
   '/app.js': { file: 'app.js', contentType: 'text/javascript; charset=utf-8' },
@@ -70,6 +71,26 @@ function dashboardData(databasePath, filters) {
   }
 }
 
+function registeredRolloutProjects(projectConfigPath = defaultProjectConfigPath) {
+  try {
+    const { readProjectConfig } = require('C:\\Users\\jwlin\\.codex\\agent-ops\\record-hook.js');
+    return readProjectConfig(projectConfigPath).map(({ id, name }) => ({ id, name }));
+  } catch {
+    // The dashboard remains read-only if local observer configuration is not
+    // available. It must not expose configuration paths or errors to the UI.
+    return [];
+  }
+}
+
+function rolloutOverviewData(databasePath, registeredProjects = registeredRolloutProjects()) {
+  const database = openDatabase(databasePath);
+  try {
+    return getRolloutOverview(database, { registeredProjects });
+  } finally {
+    closeDatabase(database);
+  }
+}
+
 function saveAgentProfile(databasePath, candidate) {
   const text = (value, maximum) => typeof value === 'string' && value.trim().length > 0 && value.trim().length <= maximum;
   if (!text(candidate?.displayName, 80) || !text(candidate?.project, 80) || !text(candidate?.role, 80) || !['Codex', 'ChatGPT', 'Other'].includes(candidate?.runtime) || (candidate.defaultModel != null && !text(candidate.defaultModel, 80))) throw new Error('Invalid agent profile.');
@@ -77,7 +98,7 @@ function saveAgentProfile(databasePath, candidate) {
   try { return createAgentProfile(database, { displayName: candidate.displayName.trim(), project: candidate.project.trim(), role: candidate.role.trim(), runtime: candidate.runtime, defaultModel: candidate.defaultModel?.trim() || null }); } finally { closeDatabase(database); }
 }
 
-function createDashboardServer({ databasePath = defaultDatabasePath } = {}) {
+function createDashboardServer({ databasePath = defaultDatabasePath, registeredProjects } = {}) {
   return http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     if (request.method === 'GET' && url.pathname === '/api/overview') {
@@ -89,6 +110,14 @@ function createDashboardServer({ databasePath = defaultDatabasePath } = {}) {
         }));
       } catch (error) {
         return sendJson(response, 500, { error: 'Unable to load local dashboard data.' });
+      }
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/rollout-overview') {
+      try {
+        return sendJson(response, 200, rolloutOverviewData(databasePath, registeredProjects));
+      } catch {
+        return sendJson(response, 500, { error: 'Unable to load local rollout overview data.' });
       }
     }
 
@@ -127,4 +156,4 @@ function startDashboard({ port = Number(process.env.PORT || 4173), databasePath 
 
 if (require.main === module) startDashboard();
 
-module.exports = { createDashboardServer, dashboardData, saveAgentProfile, saveDashboardEvent, startDashboard };
+module.exports = { createDashboardServer, dashboardData, registeredRolloutProjects, rolloutOverviewData, saveAgentProfile, saveDashboardEvent, startDashboard };

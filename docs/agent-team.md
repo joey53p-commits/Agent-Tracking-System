@@ -9,7 +9,7 @@ work adds value; they are not persistent workers.
 | --- | --- | --- |
 | Primary Manager / Integrator | Scope, sequencing, architecture, delegation, integration, acceptance, and user communication | `gpt-5.6-terra` / `medium` |
 | Builder | Database, ingestion, APIs, dashboard, tests, and documentation | `gpt-5.6-terra` / `medium` |
-| Data & Trust Reviewer | Independent read-only review of metrics, contracts, privacy, security, correctness, and evidence | `gpt-6-sol` / `medium` |
+| Data & Trust Reviewer | Independent read-only review of metrics, contracts, privacy, security, correctness, and evidence | `gpt-5.6-sol` / `medium` |
 | Scout | Bounded read-only discovery, inventories, and execution tracing | `gpt-6-luna` / `low` |
 
 `gpt-6-astra` / `high` is reserved for explicit high-consequence escalation,

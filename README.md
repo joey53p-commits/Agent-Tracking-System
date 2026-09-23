@@ -17,12 +17,20 @@ can evolve and be released independently.
 6. Use `node apps/collector/collect.js --input examples/rise-task-event.json --dry-run` to validate a safe event.
 7. Store normalized events in the local SQLite database under `data/` (ignored by Git).
 8. Start the local dashboard with `npm run dashboard`, then open `http://127.0.0.1:4173`.
+9. Start automatic local rollout ingestion with `npm run monitor`, or run one safe discovery/ingestion cycle with `npm run monitor:once`.
 
 ## Scope
 
 The first milestone is a local dashboard fed by reviewed task-event exports.
 Automated integrations with GitHub and Codex come only after the event schema,
 redaction, and retention policy have been tested with real Rise work.
+
+The Stage 6 rollout monitor remains an explicitly started local process. It
+polls local Codex rollout storage every 30 seconds by default, attributes files
+through the registered-project configuration, and reuses the existing durable
+ingestion path. It does not install hooks, scheduled tasks, services, or remote
+collectors. Use `npm run monitor -- --interval-ms 10000` to choose another
+interval (minimum 1 second).
 
 ## Repository layout
 

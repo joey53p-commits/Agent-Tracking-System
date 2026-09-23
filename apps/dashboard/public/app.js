@@ -2,7 +2,10 @@ const filters = ['project', 'workstream', 'status'];
 const runtimeModels = { Codex: ['', 'GPT-6 Astra', 'GPT-5.6 Sol', 'GPT-5.6 Terra', 'GPT-5.6 Luna', 'GPT-5.5', 'GPT-5.4 Mini'], ChatGPT: ['', 'GPT-6 Astra', 'GPT-5.6 Sol', 'GPT-5.6 Terra', 'GPT-5.6 Luna', 'Other'], Other: ['', 'Other'] };
 const pageCopy = { overview: ['LOCAL PILOT', 'Overview', 'See what is moving, what needs attention, and where to focus next.'], work: ['WORK TRACKING', 'Work', 'Record agent work, follow active tasks, and review the evidence behind each result.'], agents: ['AGENT REGISTRY', 'Agents', 'Manage the individual agents and project roles you want to evaluate over time.'], settings: ['LOCAL SETTINGS', 'Settings', 'Review the privacy-first local configuration for this tracker.'] };
 let dashboardData = null;
+let rolloutOverviewData = null;
 let selectedAgentId = null;
+const ROLLOUT_REFRESH_INTERVAL_MS = 15000;
+let rolloutRefreshPromise = null;
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c])); }
 function label(value) { return String(value || '').replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()); }
 function populateSelect(id, values, selected, formatter = label) { const select = document.querySelector(`#${id}`); const value = selected ?? select.value; select.innerHTML = ''; values.forEach((item) => select.add(new Option(formatter(item), item, false, item === value))); }
@@ -30,17 +33,87 @@ function renderAgentDetail() {
 }
 function renderAgents(agents) { const performance = dashboardData.agentPerformance || []; document.querySelector('#agent-performance-list').innerHTML = performance.length ? performance.map((agent) => `<button class="agent-performance-card${agent.agent_id === selectedAgentId ? ' selected' : ''}" type="button" data-agent-id="${escapeHtml(agent.agent_id)}"><strong>${escapeHtml(agent.display_name)}</strong><span>${escapeHtml(agent.role)}</span><div class="agent-card-metrics"><div><b>${agent.totalTasks}</b><small>tasks</small></div><div><b>${agent.completionRate == null ? '—' : `${agent.completionRate}%`}</b><small>completed</small></div><div><b>${agent.attentionTasks}</b><small>attention</small></div></div><p class="data-note">${agent.hasEnoughData ? 'Select to inspect evidence' : `Needs ${Math.max(0, 3 - agent.totalTasks)} more task records`}</p></button>`).join('') : '<p class="quiet">Add an agent profile to begin role-level tracking.</p>'; document.querySelector('#agent-list').innerHTML = agents.length ? agents.map((agent) => `<article class="agent-card"><strong>${escapeHtml(agent.display_name)}</strong><span>${escapeHtml(agent.project)} · ${escapeHtml(agent.role)}</span><small>${escapeHtml(agent.runtime)}${agent.default_model ? ` · ${escapeHtml(agent.default_model)}` : ''}</small></article>`).join('') : '<p class="quiet">Add the first agent profile to begin role-level tracking.</p>'; document.querySelectorAll('[data-agent-id]').forEach((button) => button.addEventListener('click', () => { selectedAgentId = button.dataset.agentId; renderAgents(dashboardData.agents); renderAgentDetail(); })); renderAgentDetail(); }
 function renderOverview(events) { const attention = events.filter((event) => ['blocked', 'failed', 'in_progress', 'waiting_for_approval'].includes(event.execution_status)); document.querySelector('#attention-list').innerHTML = attention.length ? attention.slice(0, 5).map((event) => `<div class="attention-item"><strong>${escapeHtml(event.task_title)}</strong><span>${label(event.execution_status)} · ${escapeHtml(event.workstream)}</span></div>`).join('') : '<p class="quiet">Nothing needs attention yet. Blocked or active work will appear here.</p>'; document.querySelector('#recent-task-list').innerHTML = events.length ? events.slice(0, 4).map((event) => taskMarkup(event, true)).join('') : '<p class="quiet">Your recent completed and active work will appear here.</p>'; document.querySelector('#active-task-list').innerHTML = attention.length ? attention.map((event) => taskMarkup(event)).join('') : '<div class="empty-state"><h3>No active or interrupted work</h3><p>Tasks marked in progress, blocked, failed, or awaiting approval will appear here.</p></div>'; }
-async function loadDashboard() { const parameters = new URLSearchParams(); filters.forEach((name) => { const value = document.querySelector(`#${name}-filter`).value; if (value) parameters.set(name, value); }); const response = await fetch(`/api/overview?${parameters}`); if (!response.ok) throw new Error('Unable to load local dashboard data.'); dashboardData = await response.json(); populateFilter('project', dashboardData.filters.projects); populateFilter('workstream', dashboardData.filters.workstreams); populateFilter('status', dashboardData.filters.statuses); populateCaptureForm(dashboardData.filters); setStartedAtDefault(); renderMetrics(dashboardData.summary.totals); renderWorkstreams(dashboardData.summary.workstreams); renderAgents(dashboardData.agents); renderTasks(dashboardData.events); renderOverview(dashboardData.events); }
+function formatCount(value) { return Number(value || 0).toLocaleString(); }
+function formatTime(value) { return value ? new Date(value).toLocaleString() : 'No ingestion recorded'; }
+function trackingState(record) {
+  if (!record.sourceHealth) return 'not_yet_ingested';
+  return record.sourceHealth.readState === 'partial' ? 'partial' : 'caught_up';
+}
+function trackingStateCopy(state) {
+  return {
+    caught_up: 'The latest local source snapshot was fully read. Totals are current only as of the last successful ingestion.',
+    partial: 'More local data remains to be read. Displayed totals are incomplete until the next successful monitor cycle.',
+    unavailable: 'The local Overview API is unavailable, so current tracking data cannot be confirmed.',
+    not_yet_ingested: 'This registered project has not yet produced a successful local ingestion snapshot.',
+  }[state];
+}
+function overallTrackingState(projects) {
+  const states = projects.map(trackingState);
+  if (states.includes('partial')) return 'partial';
+  if (states.includes('caught_up')) return 'caught_up';
+  return 'not_yet_ingested';
+}
+function renderTrackingStatus(overview) {
+  const panel = document.querySelector('#tracking-status-panel');
+  const projects = overview.projects || [];
+  const state = overallTrackingState(projects);
+  const latestIngestionAt = projects.reduce((latest, record) => {
+    const candidate = record.sourceHealth?.latestIngestionAt;
+    return candidate && (!latest || candidate > latest) ? candidate : latest;
+  }, null);
+  const names = projects.map((record) => record.project.name);
+  const cycle = overview.monitorCycle;
+  const cycleState = cycle ? label(cycle.backlogState) : 'No completed cycle recorded';
+  const cycleTime = cycle ? formatTime(cycle.completedAt) : 'No completed cycle recorded';
+  const cycleDetails = cycle
+    ? `<div><span>Last completed monitor cycle</span><strong>${escapeHtml(cycleTime)}</strong></div><div><span>Cycle backlog state</span><strong>${escapeHtml(cycleState)}</strong></div><div><span>Cycle pending data</span><strong>${formatCount(cycle.pendingBytes)} bytes</strong></div><div><span>Incomplete discovery</span><strong>${formatCount(cycle.incompleteAttributionSources)} sources</strong></div><div><span>Stalled partial sources</span><strong>${formatCount(cycle.stalledSources)} sources</strong></div>`
+    : `<div><span>Last completed monitor cycle</span><strong>${escapeHtml(cycleTime)}</strong></div><div><span>Cycle backlog state</span><strong>${escapeHtml(cycleState)}</strong></div>`;
+  panel.classList.remove('error');
+  panel.innerHTML = `<p class="eyebrow">TRACKING STATUS</p><h2>${escapeHtml(label(state))}</h2><div class="tracking-status-details"><div><span>Registered project${names.length === 1 ? '' : 's'}</span><strong>${names.length ? escapeHtml(names.join(' · ')) : 'No registered project available'}</strong></div><div><span>Last successful ingestion</span><strong>${escapeHtml(formatTime(latestIngestionAt))}</strong></div><div><span>Latest source state</span><strong>${escapeHtml(label(state))}</strong></div>${cycleDetails}</div><p>${escapeHtml(trackingStateCopy(state))} The completed-cycle record is historical status only; this page does not indicate whether a monitor is running.</p>`;
+}
+function renderRolloutOverview(overview) {
+  const empty = document.querySelector('#rollout-empty-state');
+  const container = document.querySelector('#rollout-project-list');
+  renderTrackingStatus(overview);
+  empty.hidden = overview.projects.some((record) => record.sourceHealth || record.tasks.length || record.roles.length);
+  if (!overview.projects.length) { container.innerHTML = ''; return; }
+  container.innerHTML = overview.projects.map((record) => {
+    const health = record.sourceHealth;
+    const usage = record.totals.exactResponseUsage;
+    const state = trackingState(record);
+    const pendingMarkup = health?.pendingBytes > 0 ? `<div><dt>Pending local data</dt><dd>${formatCount(health.pendingBytes)} bytes</dd></div>` : '';
+    const healthMarkup = health
+      ? `<dl class="health-list"><div><dt>Latest ingestion</dt><dd>${escapeHtml(formatTime(health.latestIngestionAt))}</dd></div><div><dt>Source state</dt><dd>${escapeHtml(label(state))}</dd></div>${pendingMarkup}</dl><p class="data-note">${escapeHtml(trackingStateCopy(state))} This does not indicate whether a monitor is running.</p>`
+      : `<p class="quiet">${escapeHtml(trackingStateCopy(state))}</p>`;
+    const tasks = record.tasks.length
+      ? record.tasks.map((task) => `<tr><td>${escapeHtml(task.taskId)}</td><td>${task.state === 'completed' ? 'Completed' : 'Active / incomplete'}</td><td>${formatCount(task.turnCount)}</td><td>${formatCount(task.exactTokenTotal)}</td><td>${escapeHtml(task.roleLabel)}</td></tr>`).join('')
+      : '<tr><td colspan="5" class="quiet">No real rollout tasks were persisted for this project.</td></tr>';
+    const roles = record.roles.length
+      ? record.roles.map((role) => `<div class="role-row"><strong>${escapeHtml(role.roleLabel)}</strong><span>${formatCount(role.turnCount)} turns · ${formatCount(role.exactTokenTotal)} exact tokens</span></div>`).join('')
+      : '<p class="quiet">No project-agent role usage is available yet.</p>';
+    return `<article class="panel rollout-project"><div class="panel-heading"><div><p class="eyebrow">REGISTERED PROJECT</p><h2>${escapeHtml(record.project.name)}</h2></div><p class="capture-note">${escapeHtml(label(state))}</p></div>${healthMarkup}<section class="metrics rollout-metrics" aria-label="${escapeHtml(record.project.name)} usage summary"><article><span>Active / incomplete</span><strong>${formatCount(record.totals.activeTasks)}</strong></article><article><span>Completed</span><strong>${formatCount(record.totals.completedTasks)}</strong></article><article><span>Exact response usage</span><strong>${formatCount(usage.totalTokens)}</strong><small>${formatCount(usage.inputTokens)} in · ${formatCount(usage.outputTokens)} out</small></article></section><section class="rollout-section"><h3>Tasks — ${escapeHtml(record.project.name)}</h3><table class="rollout-table"><thead><tr><th>Task ID</th><th>State</th><th>Turns</th><th>Exact tokens</th><th>Role</th></tr></thead><tbody>${tasks}</tbody></table><p class="data-note">Active / incomplete means no completion event was observed.</p></section><section class="rollout-section"><h3>Agent / role totals — ${escapeHtml(record.project.name)}</h3>${roles}<p class="data-note">Unknown role means the live source did not provide a child-agent label.</p></section></article>`;
+  }).join('');
+}
+function showRolloutError() { const panel = document.querySelector('#tracking-status-panel'); document.querySelector('#rollout-empty-state').hidden = true; panel.classList.add('error'); panel.innerHTML = '<p class="eyebrow">TRACKING STATUS</p><h2>Local Overview unavailable</h2><p>The local Overview API could not load, so the displayed tracking data cannot be confirmed. Retry only reloads this read-only local view; it does not start ingestion or change stored data.</p><button id="rollout-retry" class="quiet-button" type="button">Retry</button>'; document.querySelector('#rollout-project-list').innerHTML = ''; document.querySelector('#rollout-retry').addEventListener('click', () => { void loadRolloutOverview(); }); }
+function loadRolloutOverview() {
+  if (rolloutRefreshPromise) return rolloutRefreshPromise;
+  rolloutRefreshPromise = (async () => {
+    try { const response = await fetch('/api/rollout-overview'); if (!response.ok) throw new Error('Rollout overview request failed.'); rolloutOverviewData = await response.json(); renderRolloutOverview(rolloutOverviewData); } catch { showRolloutError(); } finally { rolloutRefreshPromise = null; }
+  })();
+  return rolloutRefreshPromise;
+}
+function startRolloutAutoRefresh() { return setInterval(() => loadRolloutOverview(), ROLLOUT_REFRESH_INTERVAL_MS); }
+async function loadDashboard() { const parameters = new URLSearchParams(); filters.forEach((name) => { const value = document.querySelector(`#${name}-filter`).value; if (value) parameters.set(name, value); }); const response = await fetch(`/api/overview?${parameters}`); if (!response.ok) throw new Error('Unable to load local dashboard data.'); dashboardData = await response.json(); populateFilter('project', dashboardData.filters.projects); populateFilter('workstream', dashboardData.filters.workstreams); populateFilter('status', dashboardData.filters.statuses); populateCaptureForm(dashboardData.filters); setStartedAtDefault(); renderWorkstreams(dashboardData.summary.workstreams); renderAgents(dashboardData.agents); renderTasks(dashboardData.events); await loadRolloutOverview(); }
 function showPage(page, workView) { document.querySelectorAll('[data-page-content]').forEach((item) => item.classList.toggle('active', item.dataset.pageContent === page)); document.querySelectorAll('.nav-item').forEach((item) => item.classList.toggle('active', item.dataset.page === page)); const [eyebrow, title, description] = pageCopy[page]; document.querySelector('#page-eyebrow').textContent = eyebrow; document.querySelector('#page-title').textContent = title; document.querySelector('#page-description').textContent = description; if (page === 'work') showWorkView(workView || 'record'); window.location.hash = page; }
 function showWorkView(view) { document.querySelectorAll('[data-work-content]').forEach((item) => item.classList.toggle('active', item.dataset.workContent === view)); document.querySelectorAll('.subnav-item').forEach((item) => item.classList.toggle('active', item.dataset.workView === view)); }
 function lines(id) { return document.querySelector(`#${id}`).value.split('\n').map((value) => value.trim()).filter(Boolean); }
 function toIso(id) { const value = document.querySelector(`#${id}`).value; return value ? new Date(value).toISOString() : null; }
 async function submitTask(event) { event.preventDefault(); const profile = activeProfile(); if (!profile) throw new Error('Select an agent profile before recording this task.'); const message = document.querySelector('#form-message'); const status = document.querySelector('#form-status').value; const candidate = { task: { id: `local-${crypto.randomUUID()}`, title: document.querySelector('#task-title').value.trim(), project: document.querySelector('#form-project').value, workstream: document.querySelector('#form-workstream').value }, assignment: { agentId: profile.agent_id, role: profile.role }, execution: { agent: profile.display_name, runtime: document.querySelector('#runtime').value, model: document.querySelector('#model').value || null, startedAt: toIso('started-at'), completedAt: status === 'completed' ? new Date().toISOString() : null, status }, outcome: { result: document.querySelector('#outcome').value, retryCount: Number(document.querySelector('#retry-count').value), blocker: document.querySelector('#blocker').value.trim() || null, validation: lines('validation') }, references: { repository: document.querySelector('#repository').value.trim() || null, branch: document.querySelector('#branch').value.trim() || null, commit: document.querySelector('#commit').value.trim() || null, changedFiles: lines('changed-files') } }; message.textContent = 'Recording task…'; const response = await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(candidate) }); if (!response.ok) throw new Error('Unable to record this task. Check required fields and avoid private content.'); resetCaptureForm(); message.textContent = 'Task recorded locally.'; await loadDashboard(); }
 async function submitAgent(event) { event.preventDefault(); const message = document.querySelector('#agent-message'); const candidate = { displayName: document.querySelector('#agent-name').value.trim(), project: document.querySelector('#agent-project').value, role: document.querySelector('#agent-role').value.trim(), runtime: document.querySelector('#agent-runtime').value, defaultModel: document.querySelector('#agent-model').value || null }; message.textContent = 'Adding agent…'; const response = await fetch('/api/agents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(candidate) }); if (!response.ok) throw new Error('Unable to add this agent. Check the required fields.'); const { agent } = await response.json(); document.querySelector('#agent-form').reset(); message.textContent = 'Agent profile added.'; await loadDashboard(); document.querySelector('#form-project').value = agent.project; populateAgentProfiles(agent.agent_id); }
-function showError() { document.querySelector('#recent-task-list').innerHTML = '<p class="error">The dashboard could not load the local tracker database.</p>'; }
+function showError() { document.querySelector('#page-description').textContent = 'The dashboard could not load the local tracker database.'; }
 document.querySelectorAll('[data-page]').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.page, button.dataset.workView)));
 document.querySelectorAll('.subnav-item').forEach((button) => button.addEventListener('click', () => showWorkView(button.dataset.workView)));
 filters.forEach((name) => document.querySelector(`#${name}-filter`).addEventListener('change', () => loadDashboard().catch(showError)));
 document.querySelector('#clear-filters').addEventListener('click', () => { filters.forEach((name) => { document.querySelector(`#${name}-filter`).value = ''; }); loadDashboard().catch(showError); });
 document.querySelector('#form-project').addEventListener('change', () => populateAgentProfiles()); document.querySelector('#agent-profile').addEventListener('change', updateActiveProfile); document.querySelector('#runtime').addEventListener('change', () => populateModels('model', document.querySelector('#runtime').value)); document.querySelector('#agent-runtime').addEventListener('change', () => populateModels('agent-model', document.querySelector('#agent-runtime').value)); document.querySelector('#task-form').addEventListener('submit', (event) => submitTask(event).catch((error) => { document.querySelector('#form-message').textContent = error.message; })); document.querySelector('#agent-form').addEventListener('submit', (event) => submitAgent(event).catch((error) => { document.querySelector('#agent-message').textContent = error.message; }));
-loadDashboard().then(() => { const initialPage = location.hash.slice(1); if (pageCopy[initialPage]) showPage(initialPage); }).catch(showError);
+loadDashboard().then(() => { const initialPage = location.hash.slice(1); if (pageCopy[initialPage]) showPage(initialPage); startRolloutAutoRefresh(); }).catch(showError);

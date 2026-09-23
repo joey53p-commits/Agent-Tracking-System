@@ -24,14 +24,10 @@
         <header class="topbar"><div><p id="page-eyebrow" class="eyebrow">LOCAL PILOT</p><h1 id="page-title">Overview</h1></div><p id="page-description" class="page-description">See what is moving, what needs attention, and where to focus next.</p></header>
 
         <section class="page active" id="overview-page" data-page-content="overview">
-          <div class="overview-actions"><button class="primary-button" type="button" data-page="work" data-work-view="record">Record work</button><button class="quiet-button" type="button" data-page="agents">Manage agents</button></div>
-          <section class="metrics" aria-label="Task summary">
-            <article><span>Total tasks</span><strong id="total-tasks">0</strong></article><article><span>Completed</span><strong id="completed-tasks">0</strong></article><article><span>Needs attention</span><strong id="interrupted-tasks">0</strong></article><article><span>Retries</span><strong id="retries">0</strong></article>
-          </section>
-          <section class="overview-grid">
-            <article class="panel"><div class="panel-heading"><div><p class="eyebrow">ATTENTION</p><h2>What needs review</h2></div></div><div id="attention-list" class="attention-list"></div></article>
-            <article class="panel"><div class="panel-heading"><div><p class="eyebrow">RECENT WORK</p><h2>Latest activity</h2></div><button class="text-button" type="button" data-page="work" data-work-view="history">View history</button></div><div id="recent-task-list" class="task-list compact-list"></div></article>
-          </section>
+          <p class="rollout-intro">This view uses only persisted local rollout metadata. “Exact response usage” excludes session and thread totals.</p>
+          <section id="tracking-status-panel" class="tracking-status-panel" aria-live="polite"><p class="eyebrow">TRACKING STATUS</p><h2>Reading local tracking status</h2><p>Loading the read-only local Overview API.</p></section>
+          <div id="rollout-empty-state" class="empty-state" hidden><h2>No eligible rollout usage saved yet</h2><p>The registered project is configured, but no eligible Codex rollout usage has been saved yet. Run a local monitoring cycle, then return here to review the persisted aggregate.</p></div>
+          <div id="rollout-project-list" class="rollout-project-list" aria-live="polite"></div>
         </section>
 
         <section class="page" id="work-page" data-page-content="work">

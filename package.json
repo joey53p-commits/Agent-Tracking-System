@@ -4,8 +4,10 @@
   "private": true,
   "description": "Local-first agent-work tracking for Rise development.",
   "scripts": {
-    "check": "node --check packages/event-schema/index.js && node --check apps/collector/collect.js && node --check apps/storage/database.js && node --check apps/dashboard/server.js",
+    "check": "node --check packages/event-schema/index.js && node --check packages/agent-registry/index.js && node --check packages/rollout-normalizer/index.js && node --check packages/rollout-adapter/index.js && node --check packages/lifecycle-adapter/index.js && node --check apps/collector/collect.js && node --check apps/collector/ingest-rollout.js && node --check apps/collector/ingest-lifecycle.js && node --check apps/collector/monitor-rollouts.js && node --check apps/storage/database.js && node --check apps/dashboard/server.js && node --check apps/dashboard/public/app.js",
     "dashboard": "node apps/dashboard/server.js",
+    "monitor": "node apps/collector/monitor-rollouts.js",
+    "monitor:once": "node apps/collector/monitor-rollouts.js --once",
     "test": "node --test"
   },
   "engines": { "node": ">=20" }

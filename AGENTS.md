@@ -16,7 +16,7 @@ Use only these project-local child agents:
 | Work | Agent | Model and effort |
 | --- | --- | --- |
 | Database, ingestion, APIs, dashboard, tests, and documentation | `builder` | `gpt-5.6-terra` / `medium` |
-| Metrics, data contracts, privacy, security, correctness, and evidence review | `data_trust_reviewer` | `gpt-6-sol` / `medium` |
+| Metrics, data contracts, privacy, security, correctness, and evidence review | `data_trust_reviewer` | `gpt-5.6-sol` / `medium` |
 | Bounded file discovery, inventories, and execution tracing | `scout` | `gpt-6-luna` / `low` |
 
 `gpt-6-astra` at `high` effort is an explicit temporary escalation for a
